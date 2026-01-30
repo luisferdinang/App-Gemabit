@@ -5,7 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemabit - Aprende y Gana</title>
     
-    <!-- NETWORK OPTIMIZATION: Preconnect to asset servers -->
+    <!-- PWA Metadata -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#8b5cf6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://i.ibb.co/kVhqQ0K9/gemabit.png">
+
+    <!-- NETWORK OPTIMIZATION -->
     <link rel="preconnect" href="https://i.ibb.co" crossorigin>
     <link rel="preconnect" href="https://api.dicebear.com" crossorigin>
     <link rel="preconnect" href="https://assets.mixkit.co" crossorigin>
@@ -65,7 +72,6 @@
     <style>
       body {
         background-color: #f8fafc;
-        /* Hardware acceleration for animations */
         -webkit-font-smoothing: antialiased;
       }
       .btn-bouncy {
@@ -75,7 +81,6 @@
         transform: translateY(2px);
         box-shadow: 0 0px 0 0;
       }
-      /* Custom scrollbar for game lists */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -106,5 +111,17 @@
 </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

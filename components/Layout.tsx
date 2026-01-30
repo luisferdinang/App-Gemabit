@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check, Smartphone, Download } from 'lucide-react';
 import { User } from '../types';
 import { STUDENT_AVATARS, PARENT_AVATARS } from './RoleSelector';
 import { supabaseService } from '../services/supabaseService';
@@ -15,7 +15,23 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState(user?.displayName || '');
   const [loading, setLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
   if (!user) return <>{children}</>;
 
@@ -51,6 +67,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    // Show the install prompt
+    deferredPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    // We've used the prompt, and can't use it again
+    setDeferredPrompt(null);
   };
 
   const avatarOptions = user.role === 'ALUMNO' ? STUDENT_AVATARS : PARENT_AVATARS;
@@ -105,7 +136,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
       {/* Profile Modal */}
       {showProfileModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-[2.5rem] max-w-md w-full p-8 border-b-[10px] border-slate-200 shadow-2xl relative overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] max-w-md w-full p-8 border-b-[10px] border-slate-200 shadow-2xl relative overflow-y-auto max-h-[90vh]">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
               <X size={24}/>
             </button>
@@ -121,7 +152,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
                   )}
                 </div>
                 
-                {/* Only Maestra can upload custom photos */}
                 {user.role === 'MAESTRA' && (
                   <>
                     <button 
@@ -167,13 +197,30 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
                 </div>
               </div>
 
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full bg-violet-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-violet-800 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest shadow-xl shadow-violet-100 mt-2"
-              >
-                {loading ? 'Guardando...' : 'Guardar Cambios'}
-              </button>
+              <div className="space-y-3">
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-violet-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-violet-800 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest shadow-xl shadow-violet-100 mt-2"
+                >
+                  {loading ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+
+                {/* PWA INSTALL OPTION */}
+                {deferredPrompt && (
+                  <div className="pt-4 border-t-2 border-slate-100 mt-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase text-center mb-3 tracking-widest">Acceso Directo</p>
+                    <button 
+                      type="button"
+                      onClick={handleInstallApp}
+                      className="w-full bg-sky-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-sky-700 active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center gap-3 shadow-xl shadow-sky-100"
+                    >
+                      <Smartphone size={20} strokeWidth={3} />
+                      Instalar App en el Móvil
+                    </button>
+                  </div>
+                )}
+              </div>
             </form>
           </div>
         </div>
