@@ -386,8 +386,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [completedQuizzes, setCompletedQuizzes] = useState<QuizResult[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   
-  // Arcade Bag State
-  const [sessionEarnings, setSessionEarnings] = useState(0);
+  // Arcade Bag State (Accumulated locally or IN_BAG status)
+  const [cashingOut, setCashingOut] = useState(false);
 
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -407,10 +407,14 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const profileSub = supabaseService.subscribeToChanges('profiles', `id=eq.${student.uid}`, () => {
         refreshUser();
     });
+    const quizSub = supabaseService.subscribeToChanges('quiz_results', `student_id=eq.${student.uid}`, () => {
+        loadQuizData();
+    });
 
     return () => {
         tasksSub.unsubscribe();
         profileSub.unsubscribe();
+        quizSub.unsubscribe();
     };
   }, [student.uid]);
 
@@ -437,7 +441,6 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     let totalEarnings = 0;
     let approvedItems: string[] = [];
 
-    // Calculate total earned from approved/completed tasks this week
     loadedTasks.forEach(task => {
         Object.entries(task.status).forEach(([key, completed]) => {
             if (completed) {
@@ -477,7 +480,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const earned = activeQuiz.reward;
     soundService.playCoin(); 
 
-    // AUTO-SAVE TO DB (PENDING APPROVAL)
+    // SAVE TO DB AS 'IN_BAG'
     let description = activeQuiz.question;
     if (activeQuiz.type !== 'TEXT') {
         description = `Juego: ${activeQuiz.type} completado`;
@@ -485,14 +488,25 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     await supabaseService.submitQuiz(student.uid, activeQuiz.id, description, 1, earned);
     
     // UI Feedback
-    setSessionEarnings(prev => prev + earned);
-    alert(`¡Genial! 🎒 Has ganado ${earned} MiniBits. La maestra ya ha recibido tu resultado.`);
+    alert(`¡Genial! 🎒 Has ganado ${earned} MiniBits. Se han guardado en tu Bolsa.`);
     
     // Close game and reload list
     setActiveQuiz(null); 
     loadQuizData(); 
   };
   
+  const handleCashOut = async () => {
+     setCashingOut(true);
+     const result = await supabaseService.cashOutArcade(student.uid);
+     setCashingOut(false);
+     
+     if (result.success && result.count > 0) {
+         soundService.playSuccess();
+         alert("¡Solicitud enviada! 🚀\nLa maestra revisará tu bolsa pronto.");
+         loadQuizData();
+     }
+  };
+
   const handleChangeAvatar = async (newUrl: string) => {
     const success = await supabaseService.updateAvatar(student.uid, newUrl);
     if (success) {
@@ -515,14 +529,18 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const streakPercent = Math.min((student.streakWeeks / 4) * 100, 100);
 
   // Memoized Derived State
-  const { totalQuizEarnings, pendingQuizEarnings } = useMemo(() => {
+  const { totalQuizEarnings, bagBalance, pendingQuizEarnings } = useMemo(() => {
       const total = completedQuizzes
         .filter(q => q.status === 'APPROVED')
         .reduce((sum, q) => sum + q.earned, 0);
       const pending = completedQuizzes
         .filter(q => q.status === 'PENDING')
         .reduce((sum, q) => sum + q.earned, 0);
-      return { totalQuizEarnings: total, pendingQuizEarnings: pending };
+      const inBag = completedQuizzes
+        .filter(q => q.status === 'IN_BAG')
+        .reduce((sum, q) => sum + q.earned, 0);
+        
+      return { totalQuizEarnings: total, pendingQuizEarnings: pending, bagBalance: inBag };
   }, [completedQuizzes]);
 
   const weeklyProgress = useMemo(() => {
@@ -642,7 +660,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
              <>
                 <div className="bg-white/20 p-2.5 rounded-full mb-1 group-hover:scale-110 transition-transform relative">
                   <Gamepad2 size={28} strokeWidth={3} />
-                  {pendingQuizEarnings > 0 && (
+                  {(pendingQuizEarnings > 0 || bagBalance > 0) && (
                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
                   )}
                 </div>
@@ -775,21 +793,25 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
              </div>
 
              <div className="mb-8">
-                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-6 border-4 border-amber-300 shadow-xl relative overflow-hidden">
-                     <div className="relative z-10 flex justify-between items-center">
-                         <div>
-                            <p className="text-amber-100 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-2">
-                               <Wallet size={16}/> Bolsa Actual
-                            </p>
-                            <span className="text-4xl font-black text-white flex items-center gap-2 drop-shadow-md">
-                                {sessionEarnings} <span className="text-lg opacity-80">MB</span>
-                            </span>
-                         </div>
-                         
-                         <div className="px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center gap-2 bg-white/10 border border-white/20 text-white backdrop-blur-sm">
-                             <CheckCircle2 size={18} />
-                             Guardado Auto
-                         </div>
+                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-6 border-4 border-amber-300 shadow-xl relative overflow-hidden flex justify-between items-center">
+                     <div className="relative z-10">
+                        <p className="text-amber-100 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-2">
+                           <Wallet size={16}/> Bolsa Actual
+                        </p>
+                        <span className="text-4xl font-black text-white flex items-center gap-2 drop-shadow-md">
+                            {bagBalance} <span className="text-lg opacity-80">MB</span>
+                        </span>
+                     </div>
+                     
+                     <div className="relative z-20">
+                         <button 
+                            disabled={bagBalance === 0 || cashingOut}
+                            onClick={handleCashOut}
+                            className="bg-white text-orange-600 px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg border-b-4 border-orange-200 active:translate-y-1 active:border-b-0 transition-all disabled:opacity-50 disabled:grayscale flex items-center gap-2"
+                         >
+                            {cashingOut ? <RefreshCw className="animate-spin" size={18}/> : <Send size={18} />}
+                            {bagBalance > 0 ? 'COBRAR' : 'VACÍA'}
+                         </button>
                      </div>
                      <Coins className="absolute -right-6 -bottom-6 text-white/20" size={100} />
                  </div>
@@ -848,27 +870,40 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                          <div className="space-y-4">
                              <div className="flex items-center justify-between">
                                  <h3 className="text-lg font-black flex items-center gap-2 text-emerald-400">
-                                     <CheckCircle2 size={20} /> Misiones Logradas
+                                     <CheckCircle2 size={20} /> Historial
                                  </h3>
                                  <span className="text-xs font-bold text-slate-500 bg-white/10 px-2 py-1 rounded-lg">
-                                     Total: +{totalQuizEarnings} MB
+                                     Total Ganado: +{totalQuizEarnings + pendingQuizEarnings} MB
                                  </span>
                              </div>
 
                              <div className="space-y-3">
                                  {completedQuizzes.map((result, idx) => {
                                       const isPending = result.status === 'PENDING';
+                                      const isInBag = result.status === 'IN_BAG';
+                                      const isApproved = result.status === 'APPROVED';
+
                                       return (
                                          <div key={idx} className="bg-slate-800/50 rounded-2xl p-4 flex items-center justify-between border border-white/5">
                                              <div className="flex items-center gap-4">
-                                                 <div className={`p-3 rounded-xl ${isPending ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                                                     {isPending ? <Clock size={20} /> : <CheckCircle2 size={20} />}
+                                                 <div className={`p-3 rounded-xl 
+                                                    ${isApproved ? 'bg-emerald-500/20 text-emerald-400' : ''}
+                                                    ${isPending ? 'bg-amber-500/20 text-amber-400' : ''}
+                                                    ${isInBag ? 'bg-sky-500/20 text-sky-400' : ''}
+                                                 `}>
+                                                     {isApproved ? <CheckCircle2 size={20} /> : <Clock size={20} />}
                                                  </div>
                                                  <div>
                                                      <p className="font-bold text-slate-200 text-sm line-clamp-1">{result.questionPreview}</p>
                                                      <div className="flex items-center gap-2 mt-1">
-                                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPending ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
-                                                             {isPending ? 'Esperando Aprobación' : 'Aprobado'}
+                                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full 
+                                                            ${isApproved ? 'bg-emerald-500/10 text-emerald-300' : ''}
+                                                            ${isPending ? 'bg-amber-500/10 text-amber-300' : ''}
+                                                            ${isInBag ? 'bg-sky-500/10 text-sky-300' : ''}
+                                                         `}>
+                                                             {isApproved && 'Cobrado'}
+                                                             {isPending && 'Enviado a Maestra'}
+                                                             {isInBag && 'En Bolsa (Sin cobrar)'}
                                                          </span>
                                                      </div>
                                                  </div>

@@ -80,7 +80,9 @@ export interface Quiz {
   createdBy?: 'AI' | 'TEACHER';
 }
 
-export type RedemptionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+// IN_BAG: Completed locally, waiting for student to "Cash Out"
+// PENDING: Sent to teacher, waiting for approval
+export type RedemptionStatus = 'IN_BAG' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface QuizResult {
   id: string; // Unique ID for the result attempt

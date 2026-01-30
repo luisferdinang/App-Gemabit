@@ -382,15 +382,29 @@ export const supabaseService = {
   },
 
   submitQuiz: async (studentId: string, quizId: string, question: string, score: number, earned: number) => {
+    // Save as IN_BAG (Completed but not sent to teacher yet)
     await supabase.from('quiz_results').insert({ 
       student_id: studentId, 
       quiz_id: quizId, 
       question_preview: question, 
       score, 
       earned, 
-      status: 'PENDING', 
+      status: 'IN_BAG', 
       created_at: Date.now() 
     });
+  },
+
+  cashOutArcade: async (studentId: string): Promise<{success: boolean, count: number}> => {
+     // Move all IN_BAG items to PENDING
+     const { data, error } = await supabase
+        .from('quiz_results')
+        .update({ status: 'PENDING' })
+        .eq('student_id', studentId)
+        .eq('status', 'IN_BAG')
+        .select();
+     
+     if (error) return { success: false, count: 0 };
+     return { success: true, count: data?.length || 0 };
   },
 
   getPendingQuizApprovals: async () => {
