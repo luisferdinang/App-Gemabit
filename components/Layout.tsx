@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check, Smartphone, Download } from 'lucide-react';
+import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check, Smartphone, Download, Share, PlusSquare, ExternalLink, Laptop } from 'lucide-react';
 import { User } from '../types';
 import { STUDENT_AVATARS, PARENT_AVATARS } from './RoleSelector';
 import { supabaseService } from '../services/supabaseService';
@@ -16,19 +16,44 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
   const [newDisplayName, setNewDisplayName] = useState(user?.displayName || '');
   const [loading, setLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the mini-infobar from appearing on mobile
-      e.preventDefault();
-      // Stash the event so it can be triggered later.
-      setDeferredPrompt(e);
-    };
+    // 1. Detect Install State
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsInstalled(true);
+    }
 
+    // 2. Detect iOS (iPhone, iPad, iPod, including iPads with iPadOS 13+ that act like desktops)
+    const isIOSDevice = 
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && 
+      !(window as any).MSStream;
+    setIsIOS(isIOSDevice);
+
+    // 3. Check for Global Deferred Prompt (Captured in index.html)
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+    }
+
+    // 4. Listen for PWA Ready Event (dispatched from index.html)
+    const handlePwaReady = () => {
+      setDeferredPrompt((window as any).deferredPrompt);
+    };
+    window.addEventListener('pwa-ready', handlePwaReady);
+
+    // 5. Fallback local listener
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      (window as any).deferredPrompt = e;
+    };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
+      window.removeEventListener('pwa-ready', handlePwaReady);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
@@ -70,18 +95,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
   };
 
   const handleInstallApp = async () => {
-    if (!deferredPrompt) return;
-    // Show the install prompt
-    deferredPrompt.prompt();
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    } else {
-      console.log('User dismissed the install prompt');
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else if (isIOS) {
+       // If iOS, open the profile modal to show instructions if not already open
+       setShowProfileModal(true);
     }
-    // We've used the prompt, and can't use it again
-    setDeferredPrompt(null);
   };
 
   const avatarOptions = user.role === 'ALUMNO' ? STUDENT_AVATARS : PARENT_AVATARS;
@@ -102,6 +125,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
         </div>
 
         <div className="flex items-center gap-3">
+          {/* BOTÓN DE INSTALACIÓN VISIBLE EN BARRA SUPERIOR */}
+          {(!isInstalled && (deferredPrompt || isIOS)) && (
+            <button
+              onClick={handleInstallApp}
+              className="mr-1 bg-sky-500 hover:bg-sky-400 text-white p-2 sm:px-4 sm:py-2 rounded-xl font-black text-xs shadow-lg shadow-sky-200 transition-all flex items-center gap-2 animate-bounce-slow"
+            >
+              <Download size={20} strokeWidth={3} />
+              <span className="hidden sm:inline">INSTALAR APP</span>
+            </button>
+          )}
+
           <button 
             onClick={() => {
               setNewDisplayName(user.displayName);
@@ -197,27 +231,71 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4 pt-4 border-t-2 border-slate-100">
                 <button 
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-violet-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-violet-800 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest shadow-xl shadow-violet-100 mt-2"
+                  className="w-full bg-violet-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-violet-800 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest shadow-xl shadow-violet-100"
                 >
                   {loading ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
 
-                {/* PWA INSTALL OPTION */}
-                {deferredPrompt && (
-                  <div className="pt-4 border-t-2 border-slate-100 mt-4">
-                    <p className="text-[10px] font-black text-slate-400 uppercase text-center mb-3 tracking-widest">Acceso Directo</p>
-                    <button 
-                      type="button"
-                      onClick={handleInstallApp}
-                      className="w-full bg-sky-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-sky-700 active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center gap-3 shadow-xl shadow-sky-100"
-                    >
-                      <Smartphone size={20} strokeWidth={3} />
-                      Instalar App en el Móvil
-                    </button>
+                {/* APP INSTALLATION SECTION (FALLBACK & INSTRUCTIONS) */}
+                {!isInstalled && (
+                  <div className="bg-slate-50 rounded-3xl p-5 border-2 border-slate-100 mt-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-sky-100 text-sky-600 rounded-xl">
+                        <Smartphone size={20} strokeWidth={3} />
+                      </div>
+                      <span className="font-black text-xs text-slate-500 uppercase tracking-widest">Instalar App</span>
+                    </div>
+
+                    {deferredPrompt ? (
+                      /* Automatic installation (Android/Chrome/Edge) */
+                      <button 
+                        type="button"
+                        onClick={handleInstallApp}
+                        className="w-full bg-sky-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-sky-700 active:translate-y-1 active:border-b-0 transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-100"
+                      >
+                        <Download size={18} strokeWidth={3} />
+                        Instalar Ahora
+                      </button>
+                    ) : isIOS ? (
+                      /* Manual instructions for iPhone/iPad */
+                      <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 leading-snug">
+                          Instalar en iPhone/iPad:
+                        </p>
+                        <ol className="text-[11px] font-bold text-slate-400 space-y-2">
+                          <li className="flex items-center gap-2">
+                            <span className="w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center shrink-0">1</span>
+                            Toca el botón <Share size={14} className="text-sky-500" /> (Compartir).
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <span className="w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center shrink-0">2</span>
+                            Elige <PlusSquare size={14} className="text-sky-500" /> "Añadir a inicio".
+                          </li>
+                        </ol>
+                      </div>
+                    ) : (
+                      /* Generic fallback (PC/Mac/Others) */
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200">
+                         <div className="flex items-center gap-2 mb-2 text-sky-500">
+                             <Laptop size={18} />
+                             <span className="text-xs font-bold uppercase">Instalación Manual</span>
+                         </div>
+                         <p className="text-[11px] font-bold text-slate-400 leading-snug">
+                           Para instalar, busca el icono de <strong>"Instalar App"</strong> en la barra de direcciones del navegador o en el menú de opciones (tres puntos).
+                         </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {isInstalled && (
+                  <div className="flex items-center justify-center gap-2 py-3 bg-emerald-50 rounded-2xl border-2 border-emerald-100 text-emerald-600 font-black text-xs uppercase tracking-widest">
+                    <Check size={16} strokeWidth={4} />
+                    App Instalada
                   </div>
                 )}
               </div>

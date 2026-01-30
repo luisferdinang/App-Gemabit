@@ -3,7 +3,7 @@ import { User, StudentReport, QuizType, QuizResult, Quiz } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
 import { PARENT_AVATARS } from './RoleSelector';
-import { User as UserIcon, Check, X, ShieldAlert, BarChart3, Plus, BrainCircuit, School, Home, Trophy, Gamepad2, RefreshCw, Lock, ShieldCheck, KeyRound, UserPlus, Settings, Trash2, Calendar, ChevronDown, CheckCircle2, Clock, MessageCircleQuestion, Puzzle, Layers, Scale, ListOrdered, Projector, PartyPopper, Lightbulb, ArrowRight, ArrowLeft, Star, ShoppingBag, Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, Camera, Upload, Search } from 'lucide-react';
+import { User as UserIcon, Check, X, ShieldAlert, BarChart3, Plus, BrainCircuit, School, Home, Trophy, Gamepad2, RefreshCw, Lock, ShieldCheck, KeyRound, UserPlus, Settings, Trash2, Calendar, ChevronDown, CheckCircle2, Clock, MessageCircleQuestion, Puzzle, Layers, Scale, ListOrdered, Projector, PartyPopper, Lightbulb, ArrowRight, ArrowLeft, Star, ShoppingBag, Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, Camera, Upload, Search, Download } from 'lucide-react';
 import { soundService } from '../services/soundService';
 
 interface TeacherViewProps {
@@ -77,9 +77,13 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     const subscription = supabaseService.subscribeToChanges('profiles', undefined, () => {
         loadData();
     });
+    const quizSub = supabaseService.subscribeToChanges('quiz_results', undefined, () => {
+        loadData(); // Reload pending approvals
+    });
 
     return () => {
         subscription.unsubscribe();
+        quizSub.unsubscribe();
     };
   }, [activeTab]);
 
@@ -242,7 +246,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
            <button onClick={() => setActiveTab('APPROVALS')} className={`px-5 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'APPROVALS' ? 'bg-white text-violet-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Solicitudes {(pendingUsers.length + pendingQuizApprovals.length) > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">{pendingUsers.length + pendingQuizApprovals.length}</span>}</button>
            <button onClick={() => setActiveTab('SECURITY')} className={`px-5 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'SECURITY' ? 'bg-white text-violet-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>Seguridad</button>
            <div className="w-px bg-slate-300 mx-2 my-1"></div>
-           <button onClick={() => setActiveTab('HOW_TO')} className={`px-5 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'HOW_TO' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-300 text-slate-500 hover:text-slate-600 hover:bg-slate-400'}`}><Lightbulb size={16} strokeWidth={3} /> CÓMO FUNCIONA</button>
+           <button onClick={() => setActiveTab('HOW_TO')} className={`px-5 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'HOW_TO' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-300 text-slate-500 hover:text-slate-600 hover:bg-slate-400'}`}><Lightbulb size={16} strokeWidth={3} /> CÓMO</button>
            <button onClick={() => setActiveTab('PRESENTATION')} className={`px-5 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'PRESENTATION' ? 'bg-slate-800 text-yellow-400 shadow-md' : 'bg-slate-300 text-slate-500 hover:text-slate-600 hover:bg-slate-400'}`}><Projector size={16} strokeWidth={3} /> CIERRE</button>
         </div>
       </div>
@@ -322,6 +326,289 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                   </div>
               )}
           </div>
+      )}
+
+      {/* APPROVALS TAB */}
+      {activeTab === 'APPROVALS' && (
+        <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
+          <div>
+            <h3 className="font-black text-slate-800 text-xl mb-4 flex items-center gap-2"><UserPlus className="text-violet-500"/> Registro de Usuarios</h3>
+            {pendingUsers.length === 0 ? (
+               <div className="bg-slate-100 rounded-3xl p-8 text-center border-2 border-slate-200 border-dashed"><span className="text-slate-400 font-bold text-sm">No hay solicitudes de registro.</span></div>
+            ) : (
+              <div className="space-y-3">
+                 {pendingUsers.map(u => (
+                    <div key={u.uid} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <img src={u.avatar} className="w-12 h-12 rounded-full bg-slate-100" />
+                          <div>
+                             <p className="font-black text-slate-800">{u.displayName}</p>
+                             <p className="text-xs font-bold text-slate-400">@{u.username} • {u.role}</p>
+                          </div>
+                       </div>
+                       <div className="flex gap-2">
+                          <button onClick={() => handleApprove(u.uid)} className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-200"><Check size={20}/></button>
+                          <button onClick={() => handleReject(u.uid)} className="p-2 bg-rose-100 text-rose-600 rounded-xl hover:bg-rose-200"><X size={20}/></button>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="font-black text-slate-800 text-xl mb-4 flex items-center gap-2"><Gamepad2 className="text-orange-500"/> Cobro de Arcade</h3>
+            {pendingQuizApprovals.length === 0 ? (
+               <div className="bg-slate-100 rounded-3xl p-8 text-center border-2 border-slate-200 border-dashed"><span className="text-slate-400 font-bold text-sm">No hay solicitudes de cobro.</span></div>
+            ) : (
+              <div className="space-y-3">
+                 {pendingQuizApprovals.map(q => (
+                    <div key={q.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
+                       <div className="flex items-center gap-3">
+                          <img src={q.studentAvatar} className="w-10 h-10 rounded-full bg-slate-100" />
+                          <div>
+                             <p className="font-black text-slate-800 text-sm">{q.studentName}</p>
+                             <p className="text-xs font-bold text-slate-400">Solicita Cobrar</p>
+                          </div>
+                          <div className="ml-auto bg-amber-100 text-amber-700 px-3 py-1 rounded-lg font-black text-sm flex items-center gap-1">
+                             +{q.earned} <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3" />
+                          </div>
+                       </div>
+                       <div className="bg-slate-50 p-3 rounded-xl text-xs font-bold text-slate-600 border border-slate-200">
+                          {q.questionPreview}
+                       </div>
+                       <div className="flex gap-2">
+                          <button onClick={() => handleApproveQuiz(q.id)} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl font-bold text-xs hover:bg-emerald-600 shadow-sm border-b-4 border-emerald-700 active:border-b-0 active:translate-y-1 transition-all">APROBAR</button>
+                          <button onClick={() => handleRejectQuiz(q.id)} className="px-4 py-2 bg-rose-100 text-rose-600 rounded-xl font-bold text-xs hover:bg-rose-200">RECHAZAR</button>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REPORTS TAB */}
+      {activeTab === 'REPORTS' && (
+        <div className="animate-fade-in space-y-6">
+           <div className="bg-white p-6 rounded-[2rem] shadow-sm border-2 border-slate-100">
+              <h3 className="font-black text-xl text-slate-800 mb-6 flex items-center gap-2"><BarChart3 className="text-violet-500"/> Progreso Semanal de la Clase</h3>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b-2 border-slate-100 text-xs font-black text-slate-400 uppercase tracking-wider">
+                          <th className="pb-4 pl-4">Alumno</th>
+                          <th className="pb-4">Escuela (Tareas)</th>
+                          <th className="pb-4">Casa (Tareas)</th>
+                          <th className="pb-4 text-right pr-4">Saldo Total</th>
+                       </tr>
+                    </thead>
+                    <tbody className="text-sm font-bold text-slate-600">
+                       {reports.map((r, i) => (
+                          <tr key={i} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                             <td className="py-4 pl-4 flex items-center gap-3">
+                                <img src={r.student.avatar} className="w-8 h-8 rounded-full bg-slate-100" />
+                                <span>{r.student.displayName}</span>
+                             </td>
+                             <td className="py-4">
+                                <div className="flex items-center gap-2 w-32">
+                                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div className="h-full bg-violet-500 rounded-full" style={{width: `${(r.schoolTasksCompleted/Math.max(r.schoolTasksTotal, 1))*100}%`}}></div>
+                                   </div>
+                                   <span className="text-xs text-violet-500">{r.schoolTasksCompleted}/{r.schoolTasksTotal}</span>
+                                </div>
+                             </td>
+                             <td className="py-4">
+                                <div className="flex items-center gap-2 w-32">
+                                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div className="h-full bg-emerald-500 rounded-full" style={{width: `${(r.homeTasksCompleted/Math.max(r.homeTasksTotal, 1))*100}%`}}></div>
+                                   </div>
+                                   <span className="text-xs text-emerald-500">{r.homeTasksCompleted}/{r.homeTasksTotal}</span>
+                                </div>
+                             </td>
+                             <td className="py-4 text-right pr-4 font-black text-slate-800">
+                                {getGems(r.student.balance)} GB • {r.student.balance % 100} MB
+                             </td>
+                          </tr>
+                       ))}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+        </div>
+      )}
+      
+      {/* SECURITY TAB */}
+      {activeTab === 'SECURITY' && (
+        <div className="max-w-xl mx-auto space-y-8 animate-fade-in">
+           <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-b-[8px] border-slate-200">
+              <div className="text-center mb-8">
+                 <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-lg">
+                    <ShieldCheck size={40} />
+                 </div>
+                 <h3 className="text-2xl font-black text-slate-800">Centro de Seguridad</h3>
+                 <p className="text-slate-400 font-bold text-sm">Protege el acceso a tu aula</p>
+              </div>
+
+              <div className="space-y-6">
+                 <div>
+                    <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">Código de Registro Actual</label>
+                    <div className="flex items-center gap-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl">
+                        <KeyRound className="text-slate-300" />
+                        <span className="font-mono font-black text-2xl text-slate-700 tracking-widest flex-1 text-center">{currentAccessCode}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold mt-2 pl-2">
+                       Comparte este código SOLO con los padres y alumnos para que puedan crear sus cuentas.
+                    </p>
+                 </div>
+
+                 <form onSubmit={handleUpdateCode} className="pt-4 border-t-2 border-slate-50">
+                    <label className="block text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">Cambiar Código</label>
+                    <div className="flex gap-2">
+                       <input 
+                         type="text" 
+                         value={newAccessCode}
+                         onChange={e => setNewAccessCode(e.target.value)}
+                         placeholder="Nuevo código secreto"
+                         className="flex-1 bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-slate-700 outline-none focus:border-violet-500 transition-all"
+                       />
+                       <button disabled={!newAccessCode || updatingCode} className="bg-violet-600 text-white font-black px-6 rounded-2xl hover:bg-violet-500 active:scale-95 transition-all disabled:opacity-50">
+                          {updatingCode ? <RefreshCw className="animate-spin"/> : 'Guardar'}
+                       </button>
+                    </div>
+                 </form>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* HOW TO TAB */}
+      {activeTab === 'HOW_TO' && (
+         <div className="max-w-3xl mx-auto animate-fade-in space-y-8 pb-12">
+            <div className="bg-sky-500 text-white p-8 rounded-[2.5rem] shadow-xl border-b-[8px] border-sky-700 text-center relative overflow-hidden">
+               <Lightbulb size={120} className="absolute -right-6 -bottom-6 text-sky-300 opacity-50 rotate-12" />
+               <h2 className="text-3xl font-black mb-2 relative z-10">¿Cómo Funciona Gemabit?</h2>
+               <p className="font-bold text-sky-100 relative z-10">Guía rápida para la Maestra</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+               <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4"><Wallet size={24}/></div>
+                  <h3 className="font-black text-lg text-slate-800 mb-2">1. La Economía</h3>
+                  <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                     La moneda se llama <span className="text-emerald-500">GemaBit (GB)</span>.
+                     <br/>
+                     100 MiniBits (MB) = 1 GemaBit.
+                     <br/>
+                     Los alumnos ganan MB completando tareas y jugando en el Arcade.
+                  </p>
+               </div>
+               
+               <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
+                  <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mb-4"><CheckCircle2 size={24}/></div>
+                  <h3 className="font-black text-lg text-slate-800 mb-2">2. Las Tareas</h3>
+                  <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                     Hay tareas de <strong>Escuela</strong> (tú las apruebas) y de <strong>Casa</strong> (los padres las aprueban).
+                     <br/>
+                     Cada tarea completada suma puntos a la barra de energía semanal del alumno.
+                  </p>
+               </div>
+
+               <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
+                  <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mb-4"><Gamepad2 size={24}/></div>
+                  <h3 className="font-black text-lg text-slate-800 mb-2">3. El Arcade</h3>
+                  <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                     Crea juegos educativos (preguntas, ordenar frases, matemáticas).
+                     <br/>
+                     Los alumnos juegan para ganar MB extra. Tú debes aprobar sus ganancias en la pestaña "Solicitudes".
+                  </p>
+               </div>
+
+               <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 shadow-sm">
+                  <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-2xl flex items-center justify-center mb-4"><Trophy size={24}/></div>
+                  <h3 className="font-black text-lg text-slate-800 mb-2">4. Super GemaBit</h3>
+                  <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                     Si un alumno completa todas sus tareas durante 4 semanas seguidas, gana el trofeo Super GemaBit y una gran recompensa.
+                  </p>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* PRESENTATION TAB */}
+      {activeTab === 'PRESENTATION' && (
+         <div className="animate-fade-in flex flex-col items-center justify-center min-h-[60vh]">
+            {!presentationStudent ? (
+               <div className="text-center space-y-8 max-w-2xl">
+                  <h2 className="text-3xl font-black text-slate-800">Modo Presentación</h2>
+                  <p className="text-slate-400 font-bold">Selecciona un alumno para proyectar sus logros a la clase.</p>
+                  
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                     {students.map(s => (
+                        <button 
+                           key={s.uid} 
+                           onClick={() => setPresentationStudent(s)}
+                           className="flex flex-col items-center gap-2 p-4 bg-white rounded-3xl border-2 border-slate-100 hover:border-violet-500 hover:scale-110 transition-all shadow-sm group"
+                        >
+                           <img src={s.avatar} className="w-16 h-16 rounded-full bg-slate-100 group-hover:shadow-lg transition-all" />
+                           <span className="font-black text-xs text-slate-600">{s.displayName.split(' ')[0]}</span>
+                        </button>
+                     ))}
+                  </div>
+               </div>
+            ) : (
+               <div className="w-full max-w-4xl relative">
+                  <button 
+                    onClick={() => setPresentationStudent(null)}
+                    className="absolute top-0 left-0 p-3 bg-white rounded-full shadow-lg z-20 hover:bg-slate-50 border-2 border-slate-100 text-slate-400"
+                  >
+                     <ArrowLeft size={24} />
+                  </button>
+
+                  <div className="bg-slate-900 text-white rounded-[3rem] p-12 text-center relative overflow-hidden shadow-2xl border-[10px] border-slate-800">
+                      {/* Background Effects */}
+                      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-violet-600 rounded-full blur-[100px] opacity-30 animate-pulse"></div>
+                         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-600 rounded-full blur-[100px] opacity-30 animate-pulse delay-700"></div>
+                      </div>
+
+                      <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-40 h-40 rounded-full border-8 border-white/10 p-1 mb-6 shadow-2xl relative">
+                             <img src={presentationStudent.avatar} className="w-full h-full rounded-full object-cover bg-slate-800" />
+                             <div className="absolute -bottom-4 bg-yellow-400 text-yellow-900 px-4 py-1 rounded-full font-black text-sm border-2 border-yellow-200 shadow-lg flex items-center gap-1">
+                                <Trophy size={16} /> Nivel {Math.floor(presentationStudent.xp / 100) + 1}
+                             </div>
+                          </div>
+                          
+                          <h1 className="text-5xl font-black mb-2 tracking-tight">{presentationStudent.displayName}</h1>
+                          <p className="text-slate-400 font-bold text-xl mb-10">Resumen de Progreso</p>
+
+                          <div className="grid grid-cols-3 gap-8 w-full max-w-2xl">
+                              <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 flex flex-col items-center">
+                                  <span className="text-4xl font-black text-emerald-400 mb-2">{getGems(presentationStudent.balance)}</span>
+                                  <span className="text-xs font-bold uppercase tracking-widest opacity-60">GemaBits</span>
+                              </div>
+                              <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 flex flex-col items-center">
+                                  <span className="text-4xl font-black text-violet-400 mb-2">{presentationStudent.streakWeeks}</span>
+                                  <span className="text-xs font-bold uppercase tracking-widest opacity-60">Sem. Racha</span>
+                              </div>
+                              <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 flex flex-col items-center">
+                                  <span className="text-4xl font-black text-sky-400 mb-2">{Math.floor(presentationStudent.balance % 100)}</span>
+                                  <span className="text-xs font-bold uppercase tracking-widest opacity-60">MiniBits</span>
+                              </div>
+                          </div>
+
+                          <div className="mt-12 animate-bounce-slow">
+                              <span className="bg-gradient-to-r from-yellow-300 to-yellow-500 text-yellow-900 px-8 py-3 rounded-full font-black text-lg shadow-lg shadow-yellow-500/20">
+                                 ¡Sigue así! 🚀
+                              </span>
+                          </div>
+                      </div>
+                  </div>
+               </div>
+            )}
+         </div>
       )}
 
       {/* QUIZ MODAL */}

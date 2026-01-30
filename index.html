@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Gemabit - Aprende y Gana</title>
     
     <!-- PWA Metadata -->
@@ -10,6 +10,7 @@
     <meta name="theme-color" content="#8b5cf6">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gemabit">
     <link rel="apple-touch-icon" href="https://i.ibb.co/kVhqQ0K9/gemabit.png">
 
     <!-- NETWORK OPTIMIZATION -->
@@ -21,6 +22,19 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+      // Global PWA Prompt Capture
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        window.deferredPrompt = e;
+        // Dispatch event for React
+        window.dispatchEvent(new Event('pwa-ready'));
+        console.log('PWA Install Prompt captured');
+      });
+    </script>
     <script>
       tailwind.config = {
         theme: {
@@ -73,6 +87,7 @@
       body {
         background-color: #f8fafc;
         -webkit-font-smoothing: antialiased;
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh on PWA */
       }
       .btn-bouncy {
         transition: transform 0.1s, box-shadow 0.1s;
@@ -112,7 +127,6 @@
   <body>
     <div id="root"></div>
     <script>
-      // Register Service Worker for PWA
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').then(registration => {
