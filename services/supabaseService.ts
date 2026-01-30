@@ -203,9 +203,12 @@ export const supabaseService = {
     const { data: student } = await supabase.from('profiles').select('*').eq('link_code', linkCode).single();
     if (!student) throw new Error("Código inválido");
     const { data: parent } = await supabase.from('profiles').select('linked_student_ids').eq('id', parentUid).single();
-    const currentLinks = parent.linked_student_ids || [];
-    if (!currentLinks.includes(student.id)) {
-       await supabase.from('profiles').update({ linked_student_ids: [...currentLinks, student.id] }).eq('id', parentUid);
+    
+    if (parent) {
+      const currentLinks = parent.linked_student_ids || [];
+      if (!currentLinks.includes(student.id)) {
+         await supabase.from('profiles').update({ linked_student_ids: [...currentLinks, student.id] }).eq('id', parentUid);
+      }
     }
     return mapProfileToUser(student);
   },
@@ -319,7 +322,7 @@ export const supabaseService = {
     const completedIds = (results || []).map(r => r.quiz_id);
     const { data: quizzes } = await supabase.from('quizzes').select('*');
     const available = (quizzes || []).filter(q => !completedIds.includes(q.id) && (q.assigned_to === 'ALL' || q.assigned_to === studentId)).map(q => ({ id: q.id, type: q.type, question: q.question, options: q.options, correctIndex: q.correct_index, gameItems: q.game_items, targetValue: q.target_value, reward: q.reward, difficulty: q.difficulty, assigned_to: q.assigned_to, createdBy: q.created_by }));
-    return { available, completed: (results || []).map(r => ({ id: r.id, studentId: r.student_id, quizId: r.quiz_id, questionPreview: r.question_preview, score: r.score, earned: r.earned, status: r.status, timestamp: r.created_at })) };
+    return { available, completed: (results || []).map(r => ({ id: r.id, studentId: r.student_id, quizId: r.quiz_id, question_preview: r.question_preview, score: r.score, earned: r.earned, status: r.status, timestamp: r.created_at })) };
   },
 
   // Get Arcade results specifically for a student (Teacher View)
