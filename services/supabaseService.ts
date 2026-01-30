@@ -289,14 +289,39 @@ export const supabaseService = {
 
   // QUIZ MANAGEMENT
   
-  createTeacherQuiz: async (quiz: any) => {
-    await supabase.from('quizzes').insert({ type: quiz.type, question: quiz.question, options: quiz.options, correct_index: quiz.correctIndex, game_items: quiz.gameItems, target_value: quiz.targetValue, reward: quiz.reward, difficulty: quiz.difficulty, assigned_to: quiz.assignedTo, created_by: 'TEACHER' });
+  createTeacherQuiz: async (quiz: any): Promise<{success: boolean, error?: string}> => {
+    // Se elimina el campo created_at para evitar errores si la columna no existe en BD
+    const { error } = await supabase.from('quizzes').insert({ 
+        type: quiz.type, 
+        question: quiz.question, 
+        options: quiz.options, 
+        correct_index: quiz.correctIndex, 
+        game_items: quiz.gameItems, 
+        target_value: quiz.targetValue, 
+        reward: quiz.reward, 
+        difficulty: quiz.difficulty, 
+        assigned_to: quiz.assignedTo, 
+        created_by: 'TEACHER'
+    });
+
+    if (error) {
+        console.error("Error creating quiz:", error);
+        return { success: false, error: error.message };
+    }
+    return { success: true };
   },
 
   // Fetch ALL quizzes created by teachers (for Teacher Dashboard)
   getAllTeacherQuizzes: async (): Promise<Quiz[]> => {
-    const { data } = await supabase.from('quizzes').select('*').eq('created_by', 'TEACHER').order('created_at', { ascending: false });
-    return (data || []).map(q => ({
+    // Se elimina el ordenamiento por created_at para evitar errores de columna inexistente
+    const { data, error } = await supabase.from('quizzes').select('*');
+    
+    if (error) {
+        console.error("Error fetching quizzes:", error);
+    }
+
+    // Invertimos el array en el cliente para intentar mostrar los más recientes primero (si el orden de inserción se respeta)
+    return (data || []).reverse().map(q => ({
       id: q.id,
       type: q.type,
       question: q.question,
@@ -312,9 +337,21 @@ export const supabaseService = {
   },
 
   // Delete a quiz
-  deleteQuiz: async (quizId: string): Promise<boolean> => {
+  deleteQuiz: async (quizId: string): Promise<{success: boolean, error?: string}> => {
+    // 1. Primero intentamos borrar los resultados asociados (borrado en cascada manual)
+    const { error: resultsError } = await supabase.from('quiz_results').delete().eq('quiz_id', quizId);
+    if (resultsError) {
+        console.warn("Error cleaning up results before quiz deletion:", resultsError);
+        // No retornamos false aquí porque podría no haber resultados y dar error, o queremos intentar borrar el quiz de todas formas
+    }
+
+    // 2. Borramos el juego
     const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
-    return !error;
+    
+    if (error) {
+        return { success: false, error: error.message };
+    }
+    return { success: true };
   },
 
   getStudentQuizzes: async (studentId: string): Promise<{available: Quiz[], completed: QuizResult[]}> => {
