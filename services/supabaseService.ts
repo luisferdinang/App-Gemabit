@@ -470,6 +470,24 @@ export const supabaseService = {
     return { available, completed };
   },
 
+  // NEW METHOD: Get All Quiz Results for Teacher View Stats
+  getAllQuizResults: async (): Promise<QuizResult[]> => {
+    const { data } = await supabase
+        .from('quiz_results')
+        .select('*');
+    
+    return (data || []).map(r => ({
+        id: r.id,
+        studentId: r.student_id,
+        quizId: r.quiz_id,
+        questionPreview: r.question_preview,
+        score: r.score,
+        earned: r.earned,
+        status: r.status,
+        timestamp: r.created_at
+    }));
+  },
+
   getStudentArcadeResults: async (studentId: string): Promise<QuizResult[]> => {
     const { data } = await supabase.from('quiz_results').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
     return (data || []).map(r => ({

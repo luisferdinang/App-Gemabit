@@ -33,6 +33,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
 
   // Arcade Management State
   const [teacherQuizzes, setTeacherQuizzes] = useState<Quiz[]>([]);
+  const [allQuizResults, setAllQuizResults] = useState<QuizResult[]>([]); // NEW: Store who did what
   const [isLoadingQuizzes, setIsLoadingQuizzes] = useState(false);
   const [isCreatingQuiz, setIsCreatingQuiz] = useState(false); // Estado para evitar doble submit
   const [quizToDelete, setQuizToDelete] = useState<string | null>(null); // State for custom delete quiz modal
@@ -79,6 +80,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     
     const quizResultSub = supabaseService.subscribeToChanges('quiz_results', undefined, () => {
         loadData(); 
+        if (activeTab === 'ARCADE') loadArcadeData(); // Reload stats if someone plays
     });
 
     const quizzesSub = supabaseService.subscribeToChanges('quizzes', undefined, () => {
@@ -107,8 +109,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const loadArcadeData = async () => {
       setIsLoadingQuizzes(true);
       try {
-          const q = await supabaseService.getAllTeacherQuizzes();
+          const [q, r] = await Promise.all([
+             supabaseService.getAllTeacherQuizzes(),
+             supabaseService.getAllQuizResults()
+          ]);
           setTeacherQuizzes(q);
+          setAllQuizResults(r);
       } catch (e) {
           console.error("Error loading quizzes", e);
       } finally {
@@ -214,8 +220,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     if (isCreatingQuiz) return;
     setIsCreatingQuiz(true);
 
-    console.log(">>> [DEBUG QUIZ CREATE] Iniciando creación...");
-
     const newQuiz: any = { 
         type: quizType, 
         question, 
@@ -243,14 +247,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         const result = await supabaseService.createTeacherQuiz(newQuiz);
         
         if (result.success) {
-            console.log(">>> [DEBUG QUIZ CREATE] Éxito");
             setShowQuizModal(false);
             loadArcadeData(); 
             resetForm();
             soundService.playSuccess();
             alert("✅ Juego creado correctamente.");
         } else {
-            console.error(">>> [DEBUG QUIZ CREATE] Error:", result.error);
             alert(`Error al crear el juego:\n${result.error}`);
         }
     } catch (err: any) {
@@ -297,8 +299,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const activeStudentData = useMemo(() => students.find(s => s.uid === selectedStudent), [students, selectedStudent]);
 
   const SQL_FIX = `
--- ⚠️ SCRIPT NUCLEAR PARA ARREGLAR BORRADO ⚠️
--- Ejecuta esto en el SQL Editor de Supabase
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
@@ -406,9 +406,14 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                           const visuals = getGameVisual(quiz.type);
                           const isGlobal = quiz.assignedTo === 'ALL';
                           const targetStudent = !isGlobal ? students.find(s => s.uid === quiz.assignedTo) : null;
+                          
+                          // Calculate who completed this game
+                          const completions = allQuizResults.filter(r => r.quizId === quiz.id);
+                          const uniqueStudentIds = Array.from(new Set(completions.map(c => c.studentId)));
+                          const completedStudents = uniqueStudentIds.map(id => students.find(s => s.uid === id)).filter(Boolean) as User[];
 
                           return (
-                              <div key={quiz.id} className="bg-white p-5 rounded-[2.5rem] shadow-sm border-2 border-slate-100 hover:border-violet-300 hover:shadow-xl transition-all flex flex-col group relative">
+                              <div key={quiz.id} className="bg-white p-5 rounded-[2.5rem] shadow-sm border-2 border-slate-100 hover:border-violet-300 hover:shadow-xl transition-all flex flex-col group relative h-full">
                                   
                                   <div className="flex justify-between items-start mb-4">
                                       {/* ICONO DEL JUEGO */}
@@ -446,7 +451,8 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                                       {quiz.question}
                                   </h4>
 
-                                  <div className="mt-auto pt-4 border-t border-slate-50 flex items-center gap-2">
+                                  <div className="mt-auto pt-4 border-t border-slate-50 flex flex-col gap-3">
+                                      {/* ASIGNADO A... */}
                                       {isGlobal ? (
                                           <div className="flex items-center gap-2 text-[10px] font-black text-sky-600 bg-sky-50 px-3 py-1.5 rounded-lg w-full">
                                               <Star size={14} className="fill-sky-500" /> TODA LA CLASE
@@ -457,6 +463,29 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                                                   <img src={targetStudent?.avatar || ''} className="w-full h-full object-cover" />
                                               </div>
                                               <span className="truncate">PARA: {targetStudent?.displayName.toUpperCase() || 'ALUMNO'}</span>
+                                          </div>
+                                      )}
+
+                                      {/* QUIÉN LO HIZO (Facepile) */}
+                                      {completedStudents.length > 0 ? (
+                                          <div className="flex items-center gap-2">
+                                              <div className="flex -space-x-2 overflow-hidden pl-1">
+                                                  {completedStudents.slice(0, 5).map((s, idx) => (
+                                                      <div key={idx} className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 overflow-hidden relative" title={s.displayName}>
+                                                          <img src={s.avatar} className="w-full h-full object-cover" />
+                                                      </div>
+                                                  ))}
+                                                  {completedStudents.length > 5 && (
+                                                      <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500">
+                                                          +{completedStudents.length - 5}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              <span className="text-[9px] font-bold text-slate-400">Completado</span>
+                                          </div>
+                                      ) : (
+                                          <div className="text-[9px] font-bold text-slate-300 italic px-1">
+                                              Nadie lo ha completado aún
                                           </div>
                                       )}
                                   </div>
