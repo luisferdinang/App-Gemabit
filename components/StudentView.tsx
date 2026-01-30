@@ -388,7 +388,6 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   
   // Arcade Bag State
   const [sessionEarnings, setSessionEarnings] = useState(0);
-  const [sessionQueue, setSessionQueue] = useState<{quiz: Quiz, earned: number}[]>([]);
 
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -453,20 +452,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     });
 
     if (totalEarnings > 0) {
-        // CHECK LOCAL STORAGE TO PREVENT REPEAT CELEBRATION
-        // Key format: celebration_{studentId}_{weekId}_{totalAmount}
-        // If this exact key exists, we have already celebrated this milestone.
         const weekId = getCurrentWeekId();
         const storageKey = `gemabit_celebration_${student.uid}_${weekId}_${totalEarnings}`;
         
         if (localStorage.getItem(storageKey)) {
-            // Already celebrated this exact amount for this week. Skip.
             hasCheckedCelebration.current = true;
             return;
         }
 
-        // If not found, it's a new milestone! Show it and save it.
-        soundService.playCelebration(); // Play sound
+        soundService.playCelebration(); 
         setCelebrationData({ 
             count: totalEarnings, 
             items: approvedItems.length < 3 ? approvedItems : [...approvedItems, '...y más!'] 
@@ -481,38 +475,24 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     if (!activeQuiz) return;
     
     const earned = activeQuiz.reward;
-    soundService.playCoin(); // Play coin sound
+    soundService.playCoin(); 
+
+    // AUTO-SAVE TO DB (PENDING APPROVAL)
+    let description = activeQuiz.question;
+    if (activeQuiz.type !== 'TEXT') {
+        description = `Juego: ${activeQuiz.type} completado`;
+    }
+    await supabaseService.submitQuiz(student.uid, activeQuiz.id, description, 1, earned);
     
+    // UI Feedback
     setSessionEarnings(prev => prev + earned);
-    setSessionQueue(prev => [...prev, { quiz: activeQuiz, earned }]);
+    alert(`¡Genial! 🎒 Has ganado ${earned} MiniBits. La maestra ya ha recibido tu resultado.`);
     
-    alert(`¡Genial! 🎒 Has guardado ${earned} MiniBits en tu bolsa. ¡Sigue jugando o cobra ahora!`);
-    
+    // Close game and reload list
     setActiveQuiz(null); 
+    loadQuizData(); 
   };
   
-  const handleCashOut = async () => {
-    if (sessionQueue.length === 0) return;
-    
-    soundService.playPop();
-
-    for (const item of sessionQueue) {
-       let description = item.quiz.question;
-       if (item.quiz.type !== 'TEXT') {
-           description = `Juego: ${item.quiz.type} completado`;
-       }
-       await supabaseService.submitQuiz(student.uid, item.quiz.id, description, 1, item.earned);
-    }
-    
-    alert(`¡Enviado! 🚀 Has solicitado cobrar ${sessionEarnings} MB a la maestra.`);
-    
-    setSessionEarnings(0);
-    setSessionQueue([]);
-    
-    refreshUser();
-    loadQuizData();
-  };
-
   const handleChangeAvatar = async (newUrl: string) => {
     const success = await supabaseService.updateAvatar(student.uid, newUrl);
     if (success) {
@@ -544,10 +524,6 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
         .reduce((sum, q) => sum + q.earned, 0);
       return { totalQuizEarnings: total, pendingQuizEarnings: pending };
   }, [completedQuizzes]);
-
-  const visibleQuizzes = useMemo(() => {
-      return availableQuizzes.filter(q => !sessionQueue.some(sq => sq.quiz.id === q.id));
-  }, [availableQuizzes, sessionQueue]);
 
   const weeklyProgress = useMemo(() => {
       let totalTasks = 0;
@@ -810,19 +786,10 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                             </span>
                          </div>
                          
-                         <button 
-                            onClick={handleCashOut}
-                            disabled={sessionEarnings === 0}
-                            className={`px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg
-                                ${sessionEarnings > 0 
-                                  ? 'bg-white text-orange-600 hover:bg-orange-50 animate-bounce-slow cursor-pointer border-b-4 border-orange-200' 
-                                  : 'bg-white/20 text-white/50 cursor-not-allowed border-b-4 border-transparent'
-                                }
-                            `}
-                         >
-                            <Send size={18} />
-                            {sessionEarnings > 0 ? 'Cobrar Ahora' : 'Juega para ganar'}
-                         </button>
+                         <div className="px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center gap-2 bg-white/10 border border-white/20 text-white backdrop-blur-sm">
+                             <CheckCircle2 size={18} />
+                             Guardado Auto
+                         </div>
                      </div>
                      <Coins className="absolute -right-6 -bottom-6 text-white/20" size={100} />
                  </div>
@@ -834,20 +801,20 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                          <h3 className="text-lg font-black flex items-center gap-2 text-sky-400">
                              <PlayCircle size={20} /> Disponibles
                          </h3>
-                         {visibleQuizzes.length === 0 ? (
+                         {availableQuizzes.length === 0 ? (
                              <div className="bg-white/5 rounded-3xl p-8 text-center border-2 border-dashed border-white/10">
                                  <div className="inline-block p-4 bg-white/5 rounded-full mb-3">
-                                     {availableQuizzes.length > 0 ? <Wallet className="text-amber-400" size={32} /> : <CheckCircle2 className="text-emerald-400" size={32} />}
+                                     {completedQuizzes.length > 0 ? <CheckCircle2 className="text-emerald-400" size={32} /> : <PlayCircle className="text-slate-500" size={32} />}
                                  </div>
                                  <p className="font-bold text-slate-400">
-                                     {availableQuizzes.length > 0 ? '¡Cobra tu bolsa para ver más!' : '¡Todo completado!'}
+                                     ¡Todo completado!
                                  </p>
                                  <p className="text-xs text-slate-500">
-                                     {availableQuizzes.length > 0 ? 'Tienes juegos pendientes de cobro.' : 'Vuelve mañana por más.'}
+                                     Vuelve más tarde para nuevos desafíos.
                                  </p>
                              </div>
                          ) : (
-                             visibleQuizzes.map(quiz => {
+                             availableQuizzes.map(quiz => {
                                  const visuals = getGameTypeStyles(quiz.type);
                                  return (
                                      <button 
