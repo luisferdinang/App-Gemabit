@@ -321,8 +321,35 @@ export const supabaseService = {
     const { data: results } = await supabase.from('quiz_results').select('*').eq('student_id', studentId);
     const completedIds = (results || []).map(r => r.quiz_id);
     const { data: quizzes } = await supabase.from('quizzes').select('*');
-    const available = (quizzes || []).filter(q => !completedIds.includes(q.id) && (q.assigned_to === 'ALL' || q.assigned_to === studentId)).map(q => ({ id: q.id, type: q.type, question: q.question, options: q.options, correctIndex: q.correct_index, gameItems: q.game_items, targetValue: q.target_value, reward: q.reward, difficulty: q.difficulty, assigned_to: q.assigned_to, createdBy: q.created_by }));
-    return { available, completed: (results || []).map(r => ({ id: r.id, studentId: r.student_id, quizId: r.quiz_id, question_preview: r.question_preview, score: r.score, earned: r.earned, status: r.status, timestamp: r.created_at })) };
+    
+    const available = (quizzes || [])
+      .filter(q => !completedIds.includes(q.id) && (q.assigned_to === 'ALL' || q.assigned_to === studentId))
+      .map(q => ({ 
+        id: q.id, 
+        type: q.type, 
+        question: q.question, 
+        options: q.options, 
+        correctIndex: q.correct_index, 
+        gameItems: q.game_items, 
+        targetValue: q.target_value, 
+        reward: q.reward, 
+        difficulty: q.difficulty, 
+        assignedTo: q.assigned_to, 
+        createdBy: q.created_by 
+      }));
+
+    const completed: QuizResult[] = (results || []).map(r => ({
+      id: r.id,
+      studentId: r.student_id,
+      quizId: r.quiz_id,
+      questionPreview: r.question_preview, // MAPEADO CORRECTO
+      score: r.score,
+      earned: r.earned,
+      status: r.status,
+      timestamp: r.created_at
+    }));
+
+    return { available, completed };
   },
 
   // Get Arcade results specifically for a student (Teacher View)
@@ -332,7 +359,7 @@ export const supabaseService = {
         id: r.id,
         studentId: r.student_id,
         quizId: r.quiz_id,
-        questionPreview: r.question_preview,
+        questionPreview: r.question_preview, // MAPEADO CORRECTO
         score: r.score,
         earned: r.earned,
         status: r.status,
@@ -341,14 +368,33 @@ export const supabaseService = {
   },
 
   submitQuiz: async (studentId: string, quizId: string, question: string, score: number, earned: number) => {
-    await supabase.from('quiz_results').insert({ student_id: studentId, quiz_id: quizId, question_preview: question, score, earned, status: 'PENDING', created_at: Date.now() });
+    await supabase.from('quiz_results').insert({ 
+      student_id: studentId, 
+      quiz_id: quizId, 
+      question_preview: question, 
+      score, 
+      earned, 
+      status: 'PENDING', 
+      created_at: Date.now() 
+    });
   },
 
   getPendingQuizApprovals: async () => {
     const { data: results } = await supabase.from('quiz_results').select('*').eq('status', 'PENDING');
     return await Promise.all((results || []).map(async (r) => {
        const { data: student } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', r.student_id).single();
-       return { ...r, timestamp: r.created_at, studentName: student?.display_name || 'Unknown', studentAvatar: student?.avatar_url || '' };
+       return { 
+         id: r.id,
+         studentId: r.student_id,
+         quizId: r.quiz_id,
+         questionPreview: r.question_preview, // MAPEADO CORRECTO
+         score: r.score,
+         earned: r.earned,
+         status: r.status,
+         timestamp: r.created_at,
+         studentName: student?.display_name || 'Unknown', 
+         studentAvatar: student?.avatar_url || '' 
+       };
     }));
   },
 
