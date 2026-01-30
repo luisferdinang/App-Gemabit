@@ -92,6 +92,9 @@ export const supabaseService = {
       .single();
 
     if (!profile) return { error: 'Perfil no encontrado' };
+    
+    // Check for archived users
+    if (profile.status === 'DELETED' || profile.status === 'DELETED_ARCHIVE') return { error: 'Esta cuenta ha sido eliminada.' };
     if (profile.status === 'PENDING') return { error: 'Cuenta pendiente de aprobación.' };
 
     return { user: mapProfileToUser(profile) };
@@ -162,18 +165,31 @@ export const supabaseService = {
 
   // USER MANAGEMENT
   getStudents: async (): Promise<User[]> => {
-    const { data } = await supabase.from('profiles').select('*').eq('role', 'ALUMNO').eq('status', 'APPROVED');
+    // FILTER OUT DELETED
+    const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'ALUMNO')
+        .eq('status', 'APPROVED')
+        .neq('status', 'DELETED')
+        .neq('status', 'DELETED_ARCHIVE');
     return (data || []).map(mapProfileToUser);
   },
 
   getPendingUsers: async (): Promise<User[]> => {
-    const { data } = await supabase.from('profiles').select('*').eq('status', 'PENDING');
+    const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('status', 'PENDING')
+        .neq('status', 'DELETED')
+        .neq('status', 'DELETED_ARCHIVE');
     return (data || []).map(mapProfileToUser);
   },
 
   getStudentById: async (id: string): Promise<User | undefined> => {
     const { data } = await supabase.from('profiles').select('*').eq('id', id).single();
-    return data ? mapProfileToUser(data) : undefined;
+    if (!data || data.status === 'DELETED' || data.status === 'DELETED_ARCHIVE') return undefined;
+    return mapProfileToUser(data);
   },
 
   approveUser: async (uid: string) => {
@@ -181,12 +197,57 @@ export const supabaseService = {
   },
 
   rejectUser: async (uid: string) => {
-    await supabase.from('profiles').delete().eq('id', uid);
+    // Rejection is effectively a delete/archive
+    await supabase.from('profiles').update({ status: 'DELETED' }).eq('id', uid);
   },
 
-  deleteStudent: async (uid: string): Promise<boolean> => {
-     const { error } = await supabase.from('profiles').delete().eq('id', uid);
-     return !error;
+  // --- TRIPLE STRATEGY DELETE FUNCTION (DEBUG VERSION) ---
+  deleteStudent: async (uid: string): Promise<{success: boolean, error?: string}> => {
+     try {
+       console.log(`[DEBUG SERVICE] Iniciando borrado para ID: ${uid}`);
+
+       // 1. MANUAL CLEANUP
+       console.log('[DEBUG SERVICE] Paso 1: Borrando tablas hijas (tasks)...');
+       const { error: tErr } = await supabase.from('tasks').delete().eq('student_id', uid);
+       if (tErr) console.error('[DEBUG SERVICE] Error borrando tasks:', tErr);
+       
+       console.log('[DEBUG SERVICE] Borrando transactions...');
+       const { error: trErr } = await supabase.from('transactions').delete().eq('student_id', uid);
+       if (trErr) console.error('[DEBUG SERVICE] Error borrando transactions:', trErr);
+
+       console.log('[DEBUG SERVICE] Borrando quiz_results...');
+       const { error: qErr } = await supabase.from('quiz_results').delete().eq('student_id', uid);
+       if (qErr) console.error('[DEBUG SERVICE] Error borrando quiz_results:', qErr);
+       
+       // 2. HARD DELETE
+       console.log('[DEBUG SERVICE] Paso 2: Intentando Hard Delete en profiles...');
+       const { error: hardError } = await supabase.from('profiles').delete().eq('id', uid);
+       
+       if (!hardError) {
+           console.log('[DEBUG SERVICE] Hard Delete exitoso!');
+           return { success: true };
+       }
+
+       console.error('[DEBUG SERVICE] Hard Delete falló. Razón:', hardError);
+
+       // 3. SOFT DELETE
+       console.log('[DEBUG SERVICE] Paso 3: Intentando Soft Delete (Update status=DELETED)...');
+       const { error: softError } = await supabase
+        .from('profiles')
+        .update({ status: 'DELETED' })
+        .eq('id', uid);
+
+       if (softError) {
+           console.error('[DEBUG SERVICE] Soft Delete también falló:', softError);
+           return { success: false, error: `HARD DELETE ERROR: ${hardError.message} (${hardError.code})\n\nSOFT DELETE ERROR: ${softError.message} (${softError.code})` };
+       }
+       
+       console.log('[DEBUG SERVICE] Soft Delete exitoso.');
+       return { success: true };
+     } catch (e: any) {
+       console.error('[DEBUG SERVICE] Excepción no controlada:', e);
+       return { success: false, error: `EXCEPTION: ${e.message}` };
+     }
   },
 
   updateAvatar: async (uid: string, newAvatarUrl: string) => {
@@ -201,7 +262,8 @@ export const supabaseService = {
 
   linkParent: async (parentUid: string, linkCode: string) => {
     const { data: student } = await supabase.from('profiles').select('*').eq('link_code', linkCode).single();
-    if (!student) throw new Error("Código inválido");
+    if (!student || student.status.includes('DELETED')) throw new Error("Código inválido");
+    
     const { data: parent } = await supabase.from('profiles').select('linked_student_ids').eq('id', parentUid).single();
     
     if (parent) {
@@ -217,6 +279,10 @@ export const supabaseService = {
   getTasks: async (studentId: string, weekId: string = getCurrentWeekId()): Promise<TaskLog[]> => {
     let { data } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId);
     if (!data || data.length === 0) {
+      // Check if student exists/is active before creating tasks
+      const { data: student } = await supabase.from('profiles').select('status').eq('id', studentId).single();
+      if (!student || student.status.includes('DELETED')) return [];
+
       const { data: newTasks } = await supabase.from('tasks').insert([
         { student_id: studentId, week_id: weekId, type: 'SCHOOL', status: { 'ATTENDANCE': false, 'RESPONSIBILITY': false, 'BEHAVIOR': false, 'RESPECT': false, 'PARTICIPATION': false } },
         { student_id: studentId, week_id: weekId, type: 'HOME', status: { 'CHORES': false, 'RESPECT': false, 'HYGIENE': false, 'READING': false } }
@@ -277,7 +343,15 @@ export const supabaseService = {
 
   getClassReport: async (): Promise<StudentReport[]> => {
     const weekId = getCurrentWeekId();
-    const { data: students } = await supabase.from('profiles').select('*').eq('role', 'ALUMNO').eq('status', 'APPROVED');
+    // Filter out archived
+    const { data: students } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'ALUMNO')
+        .eq('status', 'APPROVED')
+        .neq('status', 'DELETED')
+        .neq('status', 'DELETED_ARCHIVE');
+        
     const { data: tasks } = await supabase.from('tasks').select('*').eq('week_id', weekId);
     return (students || []).map(s => {
        const studentTasks = tasks?.filter(t => t.student_id === s.id) || [];
@@ -290,7 +364,6 @@ export const supabaseService = {
   // QUIZ MANAGEMENT
   
   createTeacherQuiz: async (quiz: any): Promise<{success: boolean, error?: string}> => {
-    // Se elimina el campo created_at para evitar errores si la columna no existe en BD
     const { error } = await supabase.from('quizzes').insert({ 
         type: quiz.type, 
         question: quiz.question, 
@@ -300,7 +373,7 @@ export const supabaseService = {
         target_value: quiz.targetValue, 
         reward: quiz.reward, 
         difficulty: quiz.difficulty, 
-        assigned_to: quiz.assignedTo, 
+        assigned_to: quiz.assigned_to || quiz.assignedTo, 
         created_by: 'TEACHER'
     });
 
@@ -311,16 +384,15 @@ export const supabaseService = {
     return { success: true };
   },
 
-  // Fetch ALL quizzes created by teachers (for Teacher Dashboard)
   getAllTeacherQuizzes: async (): Promise<Quiz[]> => {
-    // Se elimina el ordenamiento por created_at para evitar errores de columna inexistente
-    const { data, error } = await supabase.from('quizzes').select('*');
-    
-    if (error) {
-        console.error("Error fetching quizzes:", error);
-    }
+    // Filter out archived quizzes
+    const { data, error } = await supabase
+        .from('quizzes')
+        .select('*')
+        .neq('assigned_to', 'DELETED_ARCHIVE');
+        
+    if (error) console.error("Error fetching quizzes:", error);
 
-    // Invertimos el array en el cliente para intentar mostrar los más recientes primero (si el orden de inserción se respeta)
     return (data || []).reverse().map(q => ({
       id: q.id,
       type: q.type,
@@ -336,28 +408,37 @@ export const supabaseService = {
     }));
   },
 
-  // Delete a quiz
   deleteQuiz: async (quizId: string): Promise<{success: boolean, error?: string}> => {
-    // 1. Primero intentamos borrar los resultados asociados (borrado en cascada manual)
-    const { error: resultsError } = await supabase.from('quiz_results').delete().eq('quiz_id', quizId);
-    if (resultsError) {
-        console.warn("Error cleaning up results before quiz deletion:", resultsError);
-        // No retornamos false aquí porque podría no haber resultados y dar error, o queremos intentar borrar el quiz de todas formas
-    }
+    // SOFT DELETE STRATEGY FOR QUIZZES
+    try {
+        console.log("[Service] Borrando Quiz ID:", quizId);
+        const { data, error } = await supabase
+            .from('quizzes')
+            .update({ assigned_to: 'DELETED_ARCHIVE' })
+            .eq('id', quizId)
+            .select();
 
-    // 2. Borramos el juego
-    const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
-    
-    if (error) {
-        return { success: false, error: error.message };
+        if (error) {
+            console.error("[Service] Error Supabase:", error);
+            return { success: false, error: error.message };
+        }
+        
+        console.log("[Service] Respuesta Supabase:", data);
+        return { success: true };
+    } catch (err: any) {
+        return { success: false, error: err.message };
     }
-    return { success: true };
   },
 
   getStudentQuizzes: async (studentId: string): Promise<{available: Quiz[], completed: QuizResult[]}> => {
     const { data: results } = await supabase.from('quiz_results').select('*').eq('student_id', studentId);
     const completedIds = (results || []).map(r => r.quiz_id);
-    const { data: quizzes } = await supabase.from('quizzes').select('*');
+    
+    // Filter out archived
+    const { data: quizzes } = await supabase
+        .from('quizzes')
+        .select('*')
+        .neq('assigned_to', 'DELETED_ARCHIVE');
     
     const available = (quizzes || [])
       .filter(q => !completedIds.includes(q.id) && (q.assigned_to === 'ALL' || q.assigned_to === studentId))
@@ -389,7 +470,6 @@ export const supabaseService = {
     return { available, completed };
   },
 
-  // Get Arcade results specifically for a student (Teacher View)
   getStudentArcadeResults: async (studentId: string): Promise<QuizResult[]> => {
     const { data } = await supabase.from('quiz_results').select('*').eq('student_id', studentId).order('created_at', { ascending: false });
     return (data || []).map(r => ({
@@ -419,12 +499,15 @@ export const supabaseService = {
   getPendingQuizApprovals: async () => {
     const { data: results } = await supabase.from('quiz_results').select('*').eq('status', 'PENDING');
     return await Promise.all((results || []).map(async (r) => {
-       const { data: student } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', r.student_id).single();
+       const { data: student } = await supabase.from('profiles').select('display_name, avatar_url, status').eq('id', r.student_id).single();
+       // Skip archived/deleted students
+       if (!student || student.status.includes('DELETED')) return null;
+       
        return { 
          id: r.id,
          studentId: r.student_id,
          quizId: r.quiz_id,
-         questionPreview: r.question_preview, // MAPEADO CORRECTO
+         questionPreview: r.question_preview, 
          score: r.score,
          earned: r.earned,
          status: r.status,
@@ -432,7 +515,7 @@ export const supabaseService = {
          studentName: student?.display_name || 'Unknown', 
          studentAvatar: student?.avatar_url || '' 
        };
-    }));
+    })).then(res => res.filter(r => r !== null));
   },
 
   approveQuizRedemption: async (resultId: string) => {
