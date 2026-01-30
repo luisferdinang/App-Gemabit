@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User } from '../types';
+import { User, ExpenseRequest } from '../types';
 import { supabaseService } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X } from 'lucide-react';
 
 interface ParentViewProps {
   currentUser: User;
@@ -13,23 +13,29 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [linkCode, setLinkCode] = useState('');
+  
+  // Expenses State
+  const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
 
   useEffect(() => {
-    loadChildren();
+    loadData();
     
     // Subscribe to changes in profiles (balance)
-    const subscription = supabaseService.subscribeToChanges('profiles', undefined, () => {
-        // When any profile changes, reload children if they match
-        // Ideally filter by child ID, but refreshing all is safe here
-        loadChildren();
+    const subProfiles = supabaseService.subscribeToChanges('profiles', undefined, () => {
+        loadData();
+    });
+    // Subscribe to new expense requests
+    const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => {
+        loadData();
     });
 
     return () => {
-        subscription.unsubscribe();
+        subProfiles.unsubscribe();
+        subExpenses.unsubscribe();
     };
   }, [currentUser]);
 
-  const loadChildren = async () => {
+  const loadData = async () => {
     if (currentUser.linkedStudentIds && currentUser.linkedStudentIds.length > 0) {
       const allStudents = await supabaseService.getStudents();
       const myKids = allStudents.filter(s => currentUser.linkedStudentIds?.includes(s.uid));
@@ -37,6 +43,9 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       if (myKids.length > 0 && !selectedChild) {
         setSelectedChild(myKids[0].uid);
       }
+      
+      const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
+      setPendingExpenses(expenses);
     }
   };
 
@@ -47,7 +56,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       alert("¡Vinculación exitosa!");
       setIsLinking(false);
       setLinkCode('');
-      loadChildren(); 
+      loadData(); 
     } catch (err) {
       alert("Código incorrecto o error al vincular");
     }
@@ -55,7 +64,21 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   
   // Callback for immediate update when Parent marks a task
   const handleChildUpdate = () => {
-      loadChildren();
+      loadData();
+  };
+
+  const handleApproveExpense = async (id: string) => {
+      const result = await supabaseService.approveExpense(id);
+      if (result && !result.success) {
+          alert("Error: " + result.error);
+      } else {
+          loadData();
+      }
+  };
+
+  const handleRejectExpense = async (id: string) => {
+      await supabaseService.rejectExpense(id);
+      loadData();
   };
 
   const activeKid = children.find(c => c.uid === selectedChild);
@@ -92,6 +115,37 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         </div>
       )}
       
+      {/* PENDING EXPENSE REQUESTS ALERT SECTION */}
+      {pendingExpenses.length > 0 && (
+          <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-pulse-slow">
+              <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2">
+                  <AlertTriangle className="text-rose-500" /> Solicitudes de Gasto
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                  {pendingExpenses.map(req => (
+                      <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border border-rose-100">
+                          <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden">
+                                  <img src={req.studentAvatar} className="w-full h-full object-cover"/>
+                              </div>
+                              <div>
+                                  <p className="font-black text-slate-800 text-sm">{req.studentName}</p>
+                                  <p className="text-slate-500 text-xs font-bold">Quiere gastar en: <span className="text-slate-700">{req.description}</span></p>
+                              </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                              <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
+                              <div className="flex flex-col gap-1">
+                                  <button onClick={() => handleApproveExpense(req.id)} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"><Check size={16}/></button>
+                                  <button onClick={() => handleRejectExpense(req.id)} className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300"><X size={16}/></button>
+                              </div>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+
       <div className="grid md:grid-cols-4 gap-6">
         {/* Sidebar List */}
         <div className="md:col-span-1 space-y-3">

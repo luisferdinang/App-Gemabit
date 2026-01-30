@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType } from '../types';
+import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { soundService } from '../services/soundService';
 import { STUDENT_AVATARS as AVATAR_OPTIONS } from './RoleSelector'; 
-import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil } from 'lucide-react';
+import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus } from 'lucide-react';
 
 interface StudentViewProps {
   student: User;
@@ -385,9 +385,14 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [availableQuizzes, setAvailableQuizzes] = useState<Quiz[]>([]);
   const [completedQuizzes, setCompletedQuizzes] = useState<QuizResult[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  
-  // Arcade Bag State (Accumulated locally or IN_BAG status)
   const [cashingOut, setCashingOut] = useState(false);
+
+  // Expense Modal State (Previously Shop)
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseReason, setExpenseReason] = useState('');
+  const [expenseHistory, setExpenseHistory] = useState<ExpenseRequest[]>([]);
+  const [submittingExpense, setSubmittingExpense] = useState(false);
 
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -410,11 +415,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const quizSub = supabaseService.subscribeToChanges('quiz_results', `student_id=eq.${student.uid}`, () => {
         loadQuizData();
     });
+    const expensesSub = supabaseService.subscribeToChanges('expense_requests', `student_id=eq.${student.uid}`, () => {
+        loadExpenses();
+    });
 
     return () => {
         tasksSub.unsubscribe();
         profileSub.unsubscribe();
         quizSub.unsubscribe();
+        expensesSub.unsubscribe();
     };
   }, [student.uid]);
 
@@ -430,9 +439,42 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     setCompletedQuizzes(data.completed);
   };
 
+  const loadExpenses = async () => {
+      const ex = await supabaseService.getExpenseRequests(student.uid);
+      setExpenseHistory(ex);
+  };
+
   const openArcade = () => {
       loadQuizData();
       setShowArcade(true);
+  };
+
+  const openExpenseModal = () => {
+      loadExpenses();
+      setShowExpenseModal(true);
+  };
+
+  const handleExpenseRequest = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const amount = parseInt(expenseAmount);
+      if (!amount || amount <= 0 || !expenseReason.trim()) return;
+      if (amount > student.balance) {
+          alert("No tienes suficientes MiniBits.");
+          return;
+      }
+
+      setSubmittingExpense(true);
+      const result = await supabaseService.requestExpense(student.uid, amount, expenseReason);
+      setSubmittingExpense(false);
+
+      if (result.success) {
+          setExpenseAmount('');
+          setExpenseReason('');
+          alert("¡Solicitud enviada a tus padres!");
+          loadExpenses();
+      } else {
+          alert("Error: " + result.error);
+      }
   };
 
   const checkForCelebration = (loadedTasks: TaskLog[]) => {
@@ -671,12 +713,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
              </>
           </button>
           
-          <button className="bg-rose-400 hover:bg-rose-300 active:translate-y-1 active:border-b-0 text-white rounded-[2rem] p-4 border-b-[6px] border-rose-600 flex flex-col items-center justify-center gap-1 font-black transition-all shadow-lg shadow-rose-200 h-28 group relative overflow-hidden">
+          <button 
+             onClick={openExpenseModal}
+             className="bg-rose-400 hover:bg-rose-300 active:translate-y-1 active:border-b-0 text-white rounded-[2rem] p-4 border-b-[6px] border-rose-600 flex flex-col items-center justify-center gap-1 font-black transition-all shadow-lg shadow-rose-200 h-28 group relative overflow-hidden"
+          >
              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
              <div className="bg-white/20 p-2.5 rounded-full mb-1 group-hover:scale-110 transition-transform">
-               <ShoppingBag size={28} strokeWidth={3} />
+               <PiggyBank size={28} strokeWidth={3} />
              </div>
-             <span className="text-base tracking-tight leading-none">Tienda</span>
+             <span className="text-base tracking-tight leading-none">Mis Gastos</span>
           </button>
       </div>
 
@@ -953,6 +998,94 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                  </div>
              )}
          </div>
+      )}
+
+      {/* MODAL GASTOS (EXPENSE REQUEST) */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
+             <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-white relative overflow-hidden flex flex-col max-h-[90vh]">
+                 <div className="bg-rose-500 p-6 text-center relative border-b-4 border-rose-600">
+                     <button onClick={() => setShowExpenseModal(false)} className="absolute top-4 right-4 p-2 bg-rose-600 rounded-full text-rose-100 hover:bg-rose-700 transition-colors">
+                        <X size={20} />
+                     </button>
+                     <div className="inline-block p-3 bg-white/20 rounded-2xl backdrop-blur-sm border-2 border-white/30 mb-2">
+                        <PiggyBank size={32} className="text-white"/>
+                     </div>
+                     <h3 className="text-xl font-black text-white">Solicitar Gasto</h3>
+                     <p className="text-rose-100 text-xs font-bold mt-1">Pide permiso a tus padres para usar tus ahorros</p>
+                 </div>
+
+                 <div className="p-6 overflow-y-auto">
+                     <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-6 flex justify-between items-center">
+                         <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Saldo Disponible</span>
+                         <span className="text-xl font-black text-slate-700 flex items-center gap-1">
+                             <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-5 h-5"/> {student.balance}
+                         </span>
+                     </div>
+
+                     <form onSubmit={handleExpenseRequest} className="space-y-4 mb-8">
+                         <div>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">¿Cuánto quieres gastar?</label>
+                             <div className="relative">
+                                 <input 
+                                    type="number" 
+                                    value={expenseAmount}
+                                    onChange={e => setExpenseAmount(e.target.value)}
+                                    placeholder="0" 
+                                    className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-2xl text-slate-700 focus:border-rose-400 outline-none transition-all pr-12"
+                                 />
+                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300">MB</span>
+                             </div>
+                         </div>
+                         <div>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">¿En qué?</label>
+                             <input 
+                                type="text" 
+                                value={expenseReason}
+                                onChange={e => setExpenseReason(e.target.value)}
+                                placeholder="Ej. Helado, Juguete..." 
+                                className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-sm text-slate-700 focus:border-rose-400 outline-none transition-all"
+                             />
+                         </div>
+                         <button 
+                            disabled={submittingExpense || !expenseAmount || !expenseReason}
+                            className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-rose-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-100 disabled:opacity-50"
+                         >
+                            {submittingExpense ? <RefreshCw className="animate-spin"/> : 'Pedir Permiso'}
+                         </button>
+                     </form>
+
+                     <div>
+                         <h4 className="font-black text-slate-700 mb-3 flex items-center gap-2 text-sm">
+                             <Clock size={16} className="text-slate-400"/> Historial de Solicitudes
+                         </h4>
+                         {expenseHistory.length === 0 ? (
+                             <p className="text-center text-xs font-bold text-slate-400 py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No hay solicitudes recientes.</p>
+                         ) : (
+                             <div className="space-y-3">
+                                 {expenseHistory.map(req => (
+                                     <div key={req.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                                         <div>
+                                             <p className="font-bold text-slate-700 text-xs">{req.description}</p>
+                                             <div className="flex items-center gap-1 mt-1">
+                                                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider
+                                                    ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : ''}
+                                                    ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : ''}
+                                                    ${req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' : ''}
+                                                 `}>
+                                                     {req.status === 'APPROVED' ? 'Aprobado' : req.status === 'PENDING' ? 'Esperando' : 'Rechazado'}
+                                                 </span>
+                                             </div>
+                                         </div>
+                                         <span className="font-black text-slate-800 text-sm">-{req.amount} MB</span>
+                                     </div>
+                                 ))}
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             </div>
+        </div>
       )}
 
       {showAvatarModal && (

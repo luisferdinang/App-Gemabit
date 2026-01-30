@@ -46,6 +46,21 @@ export interface Transaction {
   type: 'EARN' | 'SPEND';
 }
 
+// EXPENSE REQUESTS (New)
+export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface ExpenseRequest {
+  id: string;
+  studentId: string;
+  amount: number;
+  description: string;
+  status: ExpenseStatus;
+  createdAt: number;
+  // Optional mapped fields for UI
+  studentName?: string;
+  studentAvatar?: string;
+}
+
 // GAME TYPES
 export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'BALANCE' | 'ORDERING';
 

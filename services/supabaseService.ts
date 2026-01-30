@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole } from '../types';
+import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole, ExpenseRequest } from '../types';
 
 // Helper to generate Week ID
 export const getCurrentWeekId = () => {
@@ -210,6 +210,7 @@ export const supabaseService = {
        const { error: tErr } = await supabase.from('tasks').delete().eq('student_id', uid);
        const { error: trErr } = await supabase.from('transactions').delete().eq('student_id', uid);
        const { error: qErr } = await supabase.from('quiz_results').delete().eq('student_id', uid);
+       const { error: eErr } = await supabase.from('expense_requests').delete().eq('student_id', uid);
        
        const { error: hardError } = await supabase.from('profiles').delete().eq('id', uid);
        
@@ -433,5 +434,96 @@ export const supabaseService = {
 
   rejectQuizRedemption: async (resultId: string) => {
     await supabase.from('quiz_results').update({ status: 'REJECTED' }).eq('id', resultId);
+  },
+
+  // --- EXPENSE REQUESTS (GASTOS) ---
+  
+  requestExpense: async (studentId: string, amount: number, description: string): Promise<{success: boolean, error?: string}> => {
+      // Validate balance locally first
+      const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
+      if (!student || student.balance < amount) return { success: false, error: 'No tienes suficientes MiniBits.' };
+
+      const { error } = await supabase.from('expense_requests').insert({
+          student_id: studentId,
+          amount,
+          description,
+          status: 'PENDING',
+          created_at: Date.now()
+      });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  },
+
+  getExpenseRequests: async (studentId: string): Promise<ExpenseRequest[]> => {
+      const { data } = await supabase
+        .from('expense_requests')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false });
+      
+      return (data || []).map(r => ({
+          id: r.id,
+          studentId: r.student_id,
+          amount: r.amount,
+          description: r.description,
+          status: r.status,
+          createdAt: r.created_at
+      }));
+  },
+
+  getPendingExpensesForParent: async (studentIds: string[]): Promise<ExpenseRequest[]> => {
+      if (!studentIds.length) return [];
+      
+      const { data } = await supabase
+        .from('expense_requests')
+        .select('*')
+        .in('student_id', studentIds)
+        .eq('status', 'PENDING');
+      
+      return await Promise.all((data || []).map(async (r) => {
+          const { data: s } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', r.student_id).single();
+          return {
+              id: r.id,
+              studentId: r.student_id,
+              amount: r.amount,
+              description: r.description,
+              status: r.status,
+              createdAt: r.created_at,
+              studentName: s?.display_name || 'Hijo',
+              studentAvatar: s?.avatar_url || ''
+          };
+      }));
+  },
+
+  approveExpense: async (requestId: string) => {
+      const { data: req } = await supabase.from('expense_requests').select('*').eq('id', requestId).single();
+      if (!req) return;
+
+      const { data: student } = await supabase.from('profiles').select('balance').eq('id', req.student_id).single();
+      if (!student) return;
+
+      if (student.balance < req.amount) {
+          // Can't approve if balance too low now
+          return { success: false, error: 'El saldo del alumno es insuficiente ahora.' };
+      }
+
+      // Perform transaction
+      await supabase.from('profiles').update({ balance: student.balance - req.amount }).eq('id', req.student_id);
+      await supabase.from('transactions').insert({ 
+          student_id: req.student_id, 
+          amount: -req.amount, 
+          description: `Gasto Aprobado: ${req.description}`, 
+          type: 'SPEND', 
+          timestamp: Date.now() 
+      });
+      
+      await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
+      return { success: true };
+  },
+
+  rejectExpense: async (requestId: string) => {
+      await supabase.from('expense_requests').update({ status: 'REJECTED' }).eq('id', requestId);
+      return { success: true };
   }
 };
