@@ -37,6 +37,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [isLoadingQuizzes, setIsLoadingQuizzes] = useState(false);
   const [isCreatingQuiz, setIsCreatingQuiz] = useState(false); // Estado para evitar doble submit
   const [quizToDelete, setQuizToDelete] = useState<string | null>(null); // State for custom delete quiz modal
+  const [quizCompletionsView, setQuizCompletionsView] = useState<string | null>(null); // State to view completion list
 
   // Management Modal State
   const [showManageModal, setShowManageModal] = useState(false);
@@ -466,12 +467,18 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                                           </div>
                                       )}
 
-                                      {/* QUIÉN LO HIZO (Facepile) */}
+                                      {/* QUIÉN LO HIZO (Facepile - Clickable) */}
                                       {completedStudents.length > 0 ? (
-                                          <div className="flex items-center gap-2">
+                                          <button 
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setQuizCompletionsView(quiz.id);
+                                            }}
+                                            className="flex items-center gap-2 group/pile hover:bg-slate-50 p-1.5 -ml-1.5 rounded-xl transition-all cursor-pointer"
+                                          >
                                               <div className="flex -space-x-2 overflow-hidden pl-1">
                                                   {completedStudents.slice(0, 5).map((s, idx) => (
-                                                      <div key={idx} className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 overflow-hidden relative" title={s.displayName}>
+                                                      <div key={idx} className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 overflow-hidden relative shadow-sm" title={s.displayName}>
                                                           <img src={s.avatar} className="w-full h-full object-cover" />
                                                       </div>
                                                   ))}
@@ -481,8 +488,8 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                                                       </div>
                                                   )}
                                               </div>
-                                              <span className="text-[9px] font-bold text-slate-400">Completado</span>
-                                          </div>
+                                              <span className="text-[9px] font-bold text-slate-400 group-hover/pile:text-violet-500 transition-colors">Ver lista</span>
+                                          </button>
                                       ) : (
                                           <div className="text-[9px] font-bold text-slate-300 italic px-1">
                                               Nadie lo ha completado aún
@@ -497,175 +504,52 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
           </div>
       )}
 
-      {/* PESTAÑA REPORTS (INFORME) */}
-      {activeTab === 'REPORTS' && (
-         <div className="space-y-6 animate-fade-in">
-             <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border-b-[6px] border-slate-100">
-                <div className="flex items-center gap-3 mb-4">
-                   <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
-                      <BarChart3 size={24}/>
-                   </div>
-                   <div>
-                      <h3 className="text-xl font-black text-slate-800">Informe Semanal</h3>
-                      <p className="text-slate-400 text-xs font-bold">Progreso de tareas y misiones</p>
-                   </div>
-                </div>
+      {/* MODAL LISTA COMPLETADOS */}
+      {quizCompletionsView && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[130] backdrop-blur-sm animate-fade-in">
+           <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border-4 border-white relative max-h-[80vh] flex flex-col">
+              <button 
+                onClick={() => setQuizCompletionsView(null)} 
+                className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+              
+              <div className="mb-4">
+                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                      <Trophy size={24} className="text-yellow-400" />
+                      Completado por
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400">
+                      Lista de alumnos que terminaron el juego
+                  </p>
+              </div>
 
-                <div className="overflow-x-auto">
-                   <table className="w-full text-left border-collapse">
-                      <thead>
-                         <tr className="text-[10px] text-slate-400 uppercase tracking-widest border-b-2 border-slate-50">
-                            <th className="py-3 pl-2">Alumno</th>
-                            <th className="py-3">Escuela</th>
-                            <th className="py-3">Casa</th>
-                         </tr>
-                      </thead>
-                      <tbody className="text-sm font-bold text-slate-700">
-                         {reports.map((report) => {
-                            const schoolPercent = (report.schoolTasksCompleted / report.schoolTasksTotal) * 100;
-                            const homePercent = (report.homeTasksCompleted / report.homeTasksTotal) * 100;
-                            
-                            return (
-                               <tr key={report.student.uid} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                                  <td className="py-4 pl-2">
-                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-slate-100 shrink-0">
-                                            <img src={report.student.avatar} className="w-full h-full object-cover"/>
-                                        </div>
-                                        <div>
-                                            <div className="font-black">{report.student.displayName.split(' ')[0]}</div>
-                                            <div className="text-[10px] text-slate-400 flex gap-1 items-center">
-                                               <img src="https://i.ibb.co/VY6QpY56/supergemabit.png" className="w-3 h-3"/> {Math.floor(report.student.balance/100)} GB
-                                            </div>
-                                        </div>
-                                     </div>
-                                  </td>
-                                  <td className="py-4 pr-4 align-middle">
-                                     <div className="w-full h-3 bg-violet-100 rounded-full overflow-hidden flex items-center relative max-w-[120px]">
-                                        <div className="h-full bg-violet-500 rounded-full" style={{width: `${schoolPercent}%`}}></div>
-                                     </div>
-                                     <span className="text-[10px] text-violet-400 font-black mt-1 block">{report.schoolTasksCompleted}/{report.schoolTasksTotal}</span>
-                                  </td>
-                                  <td className="py-4 align-middle">
-                                     <div className="w-full h-3 bg-emerald-100 rounded-full overflow-hidden flex items-center relative max-w-[120px]">
-                                        <div className="h-full bg-emerald-500 rounded-full" style={{width: `${homePercent}%`}}></div>
-                                     </div>
-                                     <span className="text-[10px] text-emerald-400 font-black mt-1 block">{report.homeTasksCompleted}/{report.homeTasksTotal}</span>
-                                  </td>
-                               </tr>
-                            );
-                         })}
-                      </tbody>
-                   </table>
-                   {reports.length === 0 && (
-                      <div className="text-center py-8 text-slate-400 font-bold">No hay datos esta semana.</div>
-                   )}
-                </div>
-             </div>
-         </div>
-      )}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                  {(() => {
+                      const completions = allQuizResults.filter(r => r.quizId === quizCompletionsView);
+                      const uniqueStudentIds = Array.from(new Set(completions.map(c => c.studentId)));
+                      const studentsInList = uniqueStudentIds.map(id => students.find(s => s.uid === id)).filter(Boolean) as User[];
+                      
+                      if (studentsInList.length === 0) return <p className="text-slate-400 font-bold text-center py-4">Nadie aún.</p>;
 
-      {/* PESTAÑA PRESENTATION (PROYECTOR) */}
-      {activeTab === 'PRESENTATION' && (
-         <div className="fixed inset-0 z-[200] bg-slate-900 text-white overflow-y-auto animate-fade-in">
-             <div className="max-w-6xl mx-auto p-8">
-                 <div className="flex justify-between items-center mb-10">
-                     <div className="flex items-center gap-4">
-                        <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-16 h-16 object-contain" />
-                        <div>
-                            <h1 className="text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400">
-                                Gemabit Aula
-                            </h1>
-                            <p className="text-slate-400 font-bold tracking-widest uppercase">Modo Proyector</p>
-                        </div>
-                     </div>
-                     <button 
-                        onClick={() => setActiveTab('STUDENTS')}
-                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-full font-black text-sm uppercase tracking-widest border border-white/20 transition-all flex items-center gap-2"
-                     >
-                        <X size={20}/> Salir
-                     </button>
-                 </div>
-
-                 {/* PODIO */}
-                 <div className="flex justify-center items-end gap-6 mb-16 h-80">
-                     {/* 2nd Place */}
-                     {[...students].sort((a,b) => b.balance - a.balance).slice(0, 3).map((student, index) => {
-                         let height = 'h-40';
-                         let color = 'bg-slate-700';
-                         let rank = index + 1;
-                         let medal = null;
-
-                         if (index === 0) { height = 'h-64'; color = 'bg-yellow-500'; medal = <Crown size={40} className="text-yellow-200 mb-2"/>; }
-                         if (index === 1) { height = 'h-52'; color = 'bg-slate-400'; }
-                         if (index === 2) { height = 'h-44'; color = 'bg-orange-700'; }
-
-                         // Swap order for visual podium (2 - 1 - 3)
-                         let orderClass = '';
-                         if (index === 0) orderClass = 'order-2';
-                         if (index === 1) orderClass = 'order-1';
-                         if (index === 2) orderClass = 'order-3';
-
-                         return (
-                             <div key={student.uid} className={`flex flex-col items-center ${orderClass} group`}>
-                                 <div className="relative mb-4">
-                                     <div className={`w-24 h-24 rounded-full border-4 ${index===0 ? 'border-yellow-400' : 'border-slate-600'} overflow-hidden bg-slate-800 relative z-10`}>
-                                         <img src={student.avatar} className="w-full h-full object-cover"/>
-                                     </div>
-                                     {index === 0 && <div className="absolute inset-0 bg-yellow-500 blur-xl opacity-40 z-0"></div>}
-                                 </div>
-                                 <div className={`w-32 ${height} ${color} rounded-t-3xl flex flex-col items-center justify-start pt-4 shadow-2xl relative`}>
-                                     {medal}
-                                     <span className="text-4xl font-black text-white/90">{rank}</span>
-                                     <div className="mt-auto pb-4 text-center w-full px-2">
-                                         <p className="font-black text-white text-lg truncate">{student.displayName.split(' ')[0]}</p>
-                                         <div className="flex items-center justify-center gap-1 text-sm font-bold opacity-80 bg-black/20 rounded-full mx-2 py-1">
-                                            <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4"/> {Math.floor(student.balance / 100)} GB
-                                         </div>
-                                     </div>
-                                 </div>
-                             </div>
-                         )
-                     })}
-                 </div>
-
-                 {/* CLASS STATS */}
-                 <div className="grid grid-cols-2 gap-8">
-                     <div className="bg-slate-800 rounded-[3rem] p-8 flex items-center gap-6 border border-slate-700 relative overflow-hidden">
-                         <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-emerald-500 rounded-full blur-3xl opacity-20"></div>
-                         <div className="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center">
-                             <TrendingUp size={40}/>
-                         </div>
-                         <div>
-                             <p className="text-slate-400 font-bold uppercase tracking-widest text-sm mb-1">Economía del Aula</p>
-                             <p className="text-5xl font-black text-white">
-                                 {Math.floor(students.reduce((acc, s) => acc + s.balance, 0) / 100)}
-                                 <span className="text-xl text-slate-500 ml-2">GB Total</span>
-                             </p>
-                         </div>
-                     </div>
-
-                     <div className="bg-slate-800 rounded-[3rem] p-8 flex items-center gap-6 border border-slate-700 relative overflow-hidden">
-                         <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-violet-500 rounded-full blur-3xl opacity-20"></div>
-                         <div className="w-20 h-20 bg-violet-500/20 text-violet-400 rounded-full flex items-center justify-center">
-                             <Trophy size={40}/>
-                         </div>
-                         <div>
-                             <p className="text-slate-400 font-bold uppercase tracking-widest text-sm mb-1">Mejor Racha</p>
-                             {(() => {
-                                 const bestStreak = Math.max(...students.map(s => s.streakWeeks));
-                                 const winners = students.filter(s => s.streakWeeks === bestStreak);
-                                 return (
-                                     <p className="text-3xl font-black text-white leading-tight">
-                                         {winners.length} Alumnos <span className="text-violet-400">con {bestStreak} sem</span>
-                                     </p>
-                                 )
-                             })()}
-                         </div>
-                     </div>
-                 </div>
-             </div>
-         </div>
+                      return studentsInList.map(s => (
+                          <div key={s.uid} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                              <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                  <img src={s.avatar} className="w-full h-full object-cover"/>
+                              </div>
+                              <div>
+                                  <p className="font-black text-slate-700 text-sm">{s.displayName}</p>
+                                  <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500">
+                                      <CheckCircle2 size={12}/> Completado
+                                  </div>
+                              </div>
+                          </div>
+                      ));
+                  })()}
+              </div>
+           </div>
+        </div>
       )}
 
       {/* MODAL CONFIRMACION ELIMINAR JUEGO (CUSTOM UI) */}
