@@ -401,6 +401,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('');
   const [isCreatingGoal, setIsCreatingGoal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -409,6 +410,9 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationData, setCelebrationData] = useState<{count: number, items: string[]}>({ count: 0, items: [] });
   const hasCheckedCelebration = useRef(false);
+
+  // Super Gemabit Exchange State
+  const [isExchangingSGB, setIsExchangingSGB] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -499,18 +503,26 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       }
   };
 
-  const handleCreateGoal = async (e: React.FormEvent) => {
+  const handleSaveGoal = async (e: React.FormEvent) => {
       e.preventDefault();
-      const amount = parseInt(newGoalTarget);
-      if (!amount || amount <= 0 || !newGoalTitle.trim()) return;
+      const amountGB = parseFloat(newGoalTarget);
+      if (!amountGB || amountGB <= 0 || !newGoalTitle.trim()) return;
 
       setIsCreatingGoal(true);
-      const result = await supabaseService.createSavingsGoal(student.uid, newGoalTitle, amount);
+      
+      let result;
+      if (editingGoalId) {
+          result = await supabaseService.updateSavingsGoal(editingGoalId, newGoalTitle, Math.round(amountGB * 100));
+      } else {
+          result = await supabaseService.createSavingsGoal(student.uid, newGoalTitle, Math.round(amountGB * 100));
+      }
+
       setIsCreatingGoal(false);
 
       if (result.success) {
           setNewGoalTitle('');
           setNewGoalTarget('');
+          setEditingGoalId(null);
           loadGoals();
           soundService.playSuccess();
       } else {
@@ -518,8 +530,20 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       }
   };
 
-  const handleDepositToGoal = async (goalId: string) => {
-      const amountStr = prompt("¿Cuántos MiniBits quieres guardar?");
+  const startEditingGoal = (goal: SavingsGoal) => {
+      setEditingGoalId(goal.id);
+      setNewGoalTitle(goal.title);
+      setNewGoalTarget((goal.targetAmount / 100).toString());
+  };
+
+  const cancelEditing = () => {
+      setEditingGoalId(null);
+      setNewGoalTitle('');
+      setNewGoalTarget('');
+  };
+
+  const handleDepositToGoal = async (goalId: string, currentGoalGB: number) => {
+      const amountStr = prompt(`Tienes ${student.balance} MB.\n¿Cuántos MiniBits quieres guardar en tu meta de ${currentGoalGB} GB?`);
       if (!amountStr) return;
       const amount = parseInt(amountStr);
       if (isNaN(amount) || amount <= 0) return;
@@ -567,6 +591,23 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       await supabaseService.updateExpenseSentiment(requestId, sentiment);
       loadExpenses();
       soundService.playPop();
+  };
+
+  const handleExchangeSGB = async () => {
+      if (student.streakWeeks < 4) return;
+      if (!confirm("¿Quieres canjear tus 4 semanas de racha por 1 Super GemaBit (5 GemaBits)?")) return;
+
+      setIsExchangingSGB(true);
+      const result = await supabaseService.exchangeSuperGemabit(student.uid);
+      setIsExchangingSGB(false);
+
+      if (result.success) {
+          soundService.playCelebration();
+          alert("¡FELICIDADES! 🎉\nHas recibido 5 GemaBits (500 MB).");
+          refreshUser();
+      } else {
+          alert("Error: " + result.error);
+      }
   };
 
   const checkForCelebration = (loadedTasks: TaskLog[]) => {
@@ -780,6 +821,16 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                <div className="absolute inset-0 bg-repeat-x opacity-20" style={{backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem'}}></div>
               <div className="bg-gradient-to-r from-yellow-300 to-yellow-500 h-full rounded-full shadow-sm" style={{ width: `${streakPercent}%` }}></div>
             </div>
+            
+            {student.streakWeeks >= 4 && (
+                <button 
+                    onClick={handleExchangeSGB}
+                    disabled={isExchangingSGB}
+                    className="mt-3 w-full bg-white text-violet-600 font-black text-xs py-2 rounded-xl shadow-lg border-b-4 border-violet-200 active:scale-95 active:border-b-0 transition-all animate-bounce-slow"
+                >
+                    {isExchangingSGB ? '...' : '¡CANJEAR AHORA!'}
+                </button>
+            )}
           </div>
           <img src="https://i.ibb.co/Y9DqFjM/supergemabit.png" className="absolute -right-2 -bottom-2 w-24 h-24 object-contain opacity-40 rotate-12" />
         </div>
@@ -1264,7 +1315,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
              <div className="bg-indigo-900 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-indigo-500 relative overflow-hidden flex flex-col max-h-[90vh]">
                  <div className="bg-indigo-800 p-6 text-center relative border-b-4 border-indigo-950">
-                     <button onClick={() => setShowGoalsModal(false)} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700">
+                     <button onClick={() => { setShowGoalsModal(false); cancelEditing(); }} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700">
                         <X size={20} />
                      </button>
                      <div className="inline-block p-3 bg-indigo-500/20 rounded-2xl backdrop-blur-sm border-2 border-indigo-400/30 mb-2">
@@ -1276,10 +1327,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
 
                  <div className="p-6 overflow-y-auto bg-indigo-900 flex-1">
                      
-                     {/* CREATE NEW GOAL */}
+                     {/* CREATE / EDIT GOAL */}
                      <div className="bg-indigo-950/50 p-4 rounded-2xl border-2 border-indigo-800 mb-6">
-                         <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest mb-3">Nueva Meta</h4>
-                         <form onSubmit={handleCreateGoal} className="flex gap-2 items-end">
+                         <div className="flex justify-between items-center mb-3">
+                             <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest">{editingGoalId ? 'Editar Meta' : 'Nueva Meta'}</h4>
+                             {editingGoalId && (
+                                 <button onClick={cancelEditing} className="text-[10px] font-bold text-indigo-400 hover:text-white bg-indigo-900 px-2 py-1 rounded-lg">Cancelar</button>
+                             )}
+                         </div>
+                         <form onSubmit={handleSaveGoal} className="flex gap-2 items-end">
                              <div className="flex-1 space-y-2">
                                 <input 
                                     type="text" 
@@ -1290,20 +1346,21 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                                 />
                                 <div className="relative">
                                     <input 
-                                        type="number" 
+                                        type="number"
+                                        step="0.1" 
                                         value={newGoalTarget}
                                         onChange={e => setNewGoalTarget(e.target.value)}
                                         placeholder="Precio"
                                         className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none pr-8"
                                     />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">MB</span>
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">GB</span>
                                 </div>
                              </div>
                              <button 
                                 disabled={isCreatingGoal || !newGoalTitle || !newGoalTarget}
-                                className="h-full bg-emerald-500 text-white p-3 rounded-xl border-b-4 border-emerald-700 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
+                                className={`h-full text-white p-3 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale ${editingGoalId ? 'bg-amber-500 border-amber-700' : 'bg-emerald-500 border-emerald-700'}`}
                              >
-                                {isCreatingGoal ? <RefreshCw className="animate-spin" size={20}/> : <Plus size={20} strokeWidth={3}/>}
+                                {isCreatingGoal ? <RefreshCw className="animate-spin" size={20}/> : editingGoalId ? <Check size={20} strokeWidth={3}/> : <Plus size={20} strokeWidth={3}/>}
                              </button>
                          </form>
                      </div>
@@ -1318,9 +1375,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                              goals.map(goal => {
                                  const progress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100);
                                  const isComplete = goal.currentAmount >= goal.targetAmount;
+                                 const targetGB = goal.targetAmount / 100;
+                                 const currentGB = (goal.currentAmount / 100).toFixed(1);
 
                                  return (
-                                     <div key={goal.id} className="bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group">
+                                     <div key={goal.id} className={`bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group ${editingGoalId === goal.id ? 'ring-4 ring-amber-400' : ''}`}>
                                          {isComplete && (
                                              <div className="absolute inset-0 bg-emerald-500/90 z-20 flex flex-col items-center justify-center text-white animate-fade-in">
                                                  <PartyPopper size={40} className="animate-bounce mb-2"/>
@@ -1336,12 +1395,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
 
                                          <div className="flex justify-between items-start mb-2">
                                              <h4 className="font-black text-slate-800 text-lg">{goal.title}</h4>
-                                             <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1"><X size={16}/></button>
+                                             <div className="flex gap-1">
+                                                 <button onClick={() => startEditingGoal(goal)} className="text-slate-300 hover:text-amber-500 p-1 bg-slate-50 rounded-lg"><Pencil size={14}/></button>
+                                                 <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1 bg-slate-50 rounded-lg"><X size={14}/></button>
+                                             </div>
                                          </div>
                                          
                                          <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
-                                             <span>{goal.currentAmount} MB</span>
-                                             <span>{goal.targetAmount} MB</span>
+                                             <span className="flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-3 h-3"/> {currentGB} GB</span>
+                                             <span className="flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-3 h-3"/> {targetGB} GB</span>
                                          </div>
                                          
                                          <div className="h-4 bg-slate-100 rounded-full overflow-hidden mb-4 border border-slate-200">
@@ -1355,7 +1417,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
 
                                          <div className="flex gap-2">
                                              <button 
-                                                onClick={() => handleDepositToGoal(goal.id)}
+                                                onClick={() => handleDepositToGoal(goal.id, targetGB)}
                                                 className="flex-1 bg-indigo-500 text-white py-2 rounded-xl font-bold text-xs border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 transition-all"
                                              >
                                                  Guardar +

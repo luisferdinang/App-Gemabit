@@ -550,6 +550,15 @@ export const supabaseService = {
       return { success: true };
   },
 
+  updateSavingsGoal: async (goalId: string, title: string, targetAmount: number): Promise<{success: boolean, error?: string}> => {
+      const { error } = await supabase.from('savings_goals').update({
+          title,
+          target_amount: targetAmount
+      }).eq('id', goalId);
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  },
+
   getSavingsGoals: async (studentId: string): Promise<SavingsGoal[]> => {
       const { data } = await supabase.from('savings_goals').select('*').eq('student_id', studentId);
       return (data || []).map(g => ({
@@ -607,6 +616,31 @@ export const supabaseService = {
           await supabaseService.withdrawFromGoal(goalId, goal.current_amount);
       }
       await supabase.from('savings_goals').delete().eq('id', goalId);
+      return { success: true };
+  },
+
+  // --- SUPER GEMABIT EXCHANGE ---
+  exchangeSuperGemabit: async (studentId: string): Promise<{success: boolean, error?: string}> => {
+      const { data: student } = await supabase.from('profiles').select('streak_weeks, balance').eq('id', studentId).single();
+      
+      if (!student) return { success: false, error: 'Estudiante no encontrado' };
+      if (student.streak_weeks < 4) return { success: false, error: 'Aún no completas las 4 semanas.' };
+
+      // Exchange: +500 MB (5 GB), -4 Weeks Streak
+      const reward = 500;
+      await supabase.from('profiles').update({ 
+          balance: student.balance + reward,
+          streak_weeks: student.streak_weeks - 4
+      }).eq('id', studentId);
+
+      await supabase.from('transactions').insert({ 
+          student_id: studentId, 
+          amount: reward, 
+          description: '¡Canje de Super GemaBit! (4 semanas)', 
+          type: 'EARN', 
+          timestamp: Date.now() 
+      });
+
       return { success: true };
   }
 };
