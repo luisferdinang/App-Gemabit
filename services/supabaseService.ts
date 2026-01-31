@@ -317,6 +317,24 @@ export const supabaseService = {
     });
   },
 
+  // TRANSACTION HISTORY
+  getTransactions: async (studentId: string): Promise<Transaction[]> => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('timestamp', { ascending: false });
+      
+      return (data || []).map(t => ({
+          id: t.id,
+          studentId: t.student_id,
+          amount: t.amount,
+          description: t.description,
+          type: t.type,
+          timestamp: t.timestamp
+      }));
+  },
+
   // QUIZ MANAGEMENT
   createTeacherQuiz: async (quiz: any): Promise<{success: boolean, error?: string}> => {
     const { error } = await supabase.from('quizzes').insert({ 

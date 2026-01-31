@@ -1,14 +1,41 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest, SavingsGoal, ExpenseCategory } from '../types';
+import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest, SavingsGoal, ExpenseCategory, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { soundService } from '../services/soundService';
 import { STUDENT_AVATARS as AVATAR_OPTIONS } from './RoleSelector'; 
-import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus, Target, Mountain, Heart, Star, SmilePlus, Meh, Frown } from 'lucide-react';
+import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus, Target, Mountain, Heart, Star, SmilePlus, Meh, Frown, TrendingUp, Calendar, ArrowUpCircle, ArrowDownCircle, History, Medal } from 'lucide-react';
 
 interface StudentViewProps {
   student: User;
   refreshUser: () => void;
 }
+
+// --- DATE HELPER ---
+const getWeekDateRange = (weekId: string) => {
+  try {
+    const [yearStr, weekStr] = weekId.split('-W');
+    const year = parseInt(yearStr);
+    const week = parseInt(weekStr);
+    
+    // Simple calculation for Monday of the ISO week
+    const simple = new Date(year, 0, 1 + (week - 1) * 7);
+    const dow = simple.getDay();
+    const isoWeekStart = simple;
+    if (dow <= 4)
+        isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    else
+        isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
+
+    const start = new Date(isoWeekStart);
+    const end = new Date(isoWeekStart);
+    end.setDate(end.getDate() + 6);
+
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+    return `${start.toLocaleDateString('es-ES', options)} - ${end.toLocaleDateString('es-ES', options)}`;
+  } catch (e) {
+    return 'Semana Actual';
+  }
+};
 
 // --- VISUAL HELPERS FOR GAME TYPES ---
 const getGameTypeStyles = (type: QuizType) => {
@@ -403,6 +430,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [isCreatingGoal, setIsCreatingGoal] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
+  // Finance / "Mi Tesoro" State
+  const [showFinanceModal, setShowFinanceModal] = useState(false);
+  const [financeTransactions, setFinanceTransactions] = useState<Transaction[]>([]);
+  const [financeTimeframe, setFinanceTimeframe] = useState<'DAY' | 'WEEK' | 'MONTH' | 'ALL'>('WEEK');
+
+  // History Modal State
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [studentWeeks, setStudentWeeks] = useState<{weekId: string, completion: number}[]>([]);
+
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
 
@@ -416,10 +452,12 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
 
   useEffect(() => {
     loadTasks();
+    loadWeeksHistory();
     
     // Realtime Subscriptions
     const tasksSub = supabaseService.subscribeToChanges('tasks', `student_id=eq.${student.uid}`, () => {
         loadTasks();
+        loadWeeksHistory();
     });
     const profileSub = supabaseService.subscribeToChanges('profiles', `id=eq.${student.uid}`, () => {
         refreshUser();
@@ -433,6 +471,9 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const goalsSub = supabaseService.subscribeToChanges('savings_goals', `student_id=eq.${student.uid}`, () => {
         loadGoals();
     });
+    const transSub = supabaseService.subscribeToChanges('transactions', `student_id=eq.${student.uid}`, () => {
+        loadFinanceData();
+    });
 
     return () => {
         tasksSub.unsubscribe();
@@ -440,6 +481,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
         quizSub.unsubscribe();
         expensesSub.unsubscribe();
         goalsSub.unsubscribe();
+        transSub.unsubscribe();
     };
   }, [student.uid]);
 
@@ -447,6 +489,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const data = await supabaseService.getTasks(student.uid);
     setTasks(data);
     checkForCelebration(data);
+  };
+
+  const loadWeeksHistory = async () => {
+      const data = await supabaseService.getStudentWeeks(student.uid);
+      setStudentWeeks(data);
   };
 
   const loadQuizData = async () => {
@@ -465,6 +512,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       setGoals(g);
   };
 
+  const loadFinanceData = async () => {
+      const t = await supabaseService.getTransactions(student.uid);
+      setFinanceTransactions(t);
+  };
+
   const openArcade = () => {
       loadQuizData();
       setShowArcade(true);
@@ -480,6 +532,17 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       setShowGoalsModal(true);
   };
 
+  const openFinanceModal = () => {
+      loadFinanceData();
+      setShowFinanceModal(true);
+  };
+
+  const openHistoryModal = () => {
+      loadWeeksHistory();
+      setShowHistoryModal(true);
+  };
+
+  // ... (Keeping existing handlers) ...
   const handleExpenseRequest = async (e: React.FormEvent) => {
       e.preventDefault();
       const amount = parseInt(expenseAmount);
@@ -718,6 +781,35 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       return { totalQuizEarnings: total, pendingQuizEarnings: pending, bagBalance: inBag };
   }, [completedQuizzes]);
 
+  // Derived Finance Data
+  const { filteredTransactions, totalEarned, totalSpent } = useMemo(() => {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      
+      const filtered = financeTransactions.filter(t => {
+          const tDate = new Date(t.timestamp);
+          tDate.setHours(0, 0, 0, 0);
+          
+          if (financeTimeframe === 'DAY') return tDate.getTime() === now.getTime();
+          if (financeTimeframe === 'WEEK') {
+              const weekAgo = new Date(now);
+              weekAgo.setDate(now.getDate() - 7);
+              return tDate >= weekAgo;
+          }
+          if (financeTimeframe === 'MONTH') {
+              const monthAgo = new Date(now);
+              monthAgo.setDate(now.getDate() - 30);
+              return tDate >= monthAgo;
+          }
+          return true; // ALL
+      });
+
+      const earned = filtered.filter(t => t.type === 'EARN').reduce((sum, t) => sum + t.amount, 0);
+      const spent = filtered.filter(t => t.type === 'SPEND').reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+      return { filteredTransactions: filtered, totalEarned: earned, totalSpent: spent };
+  }, [financeTransactions, financeTimeframe]);
+
   const weeklyProgress = useMemo(() => {
       let totalTasks = 0;
       let completedTasks = 0;
@@ -756,6 +848,9 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
               );
       }
   };
+
+  const schoolTask = tasks.find(t => t.type === 'SCHOOL');
+  const homeTask = tasks.find(t => t.type === 'HOME');
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -836,6 +931,29 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
         </div>
       </div>
 
+      {/* FINANCE TILE */}
+      <div className="grid grid-cols-1">
+          <button 
+             onClick={openFinanceModal}
+             className="bg-amber-400 hover:bg-amber-300 active:translate-y-1 active:border-b-0 text-white rounded-[2rem] p-6 border-b-[6px] border-amber-600 flex flex-row items-center justify-between font-black transition-all shadow-lg shadow-amber-200 relative overflow-hidden group"
+          >
+             <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+             <div className="flex items-center gap-4 relative z-10">
+                <div className="bg-white/20 p-3 rounded-2xl group-hover:scale-110 transition-transform">
+                  <TrendingUp size={32} strokeWidth={3} />
+                </div>
+                <div className="text-left">
+                    <span className="text-lg tracking-tight leading-none block">Mi Tesoro</span>
+                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Mira lo que has ganado</span>
+                </div>
+             </div>
+             <div className="relative z-10 bg-amber-700/20 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                 <Calendar size={20} className="opacity-70"/>
+             </div>
+             <TrendingUp className="absolute -right-6 -bottom-6 text-amber-900/20 rotate-12" size={120} />
+          </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
           <button 
              onClick={openArcade}
@@ -900,7 +1018,10 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                     <Trophy className="text-yellow-400 fill-yellow-400 animate-bounce-slow" />
                     Misiones Semanales
                 </h3>
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Completa todo para el Super GemaBit</p>
+                <div className="flex items-center gap-3">
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Completa todo para el Super GemaBit</p>
+                    <button onClick={openHistoryModal} className="bg-slate-700 hover:bg-slate-600 text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"><History size={12}/> Historial</button>
+                </div>
               </div>
               <span className="font-black text-3xl text-emerald-400">{Math.round(weeklyProgress)}%</span>
            </div>
@@ -918,25 +1039,21 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
            <p className="text-slate-400 font-bold text-center py-8">Cargando misiones...</p>
         ) : (
           <div className="grid gap-8">
-            {tasks.map((task) => {
-              const isSchool = task.type === 'SCHOOL';
-              return (
-                <div key={task.id} className="relative">
-                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
-                      <div className={`
-                        px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest shadow-lg border-b-4 flex items-center gap-2
-                        ${isSchool ? 'bg-violet-500 border-violet-700 text-white' : 'bg-emerald-500 border-emerald-700 text-white'}
-                      `}>
-                        {isSchool ? <School size={16}/> : <Home size={16}/>}
-                        {isSchool ? 'Misiones de Escuela' : 'Misiones del Hogar'}
+            {schoolTask && (
+                <div key={schoolTask.id} className="relative">
+                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 w-full px-4 text-center">
+                      <div className="inline-flex items-center gap-2 bg-violet-500 border-b-4 border-violet-700 text-white px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest shadow-lg">
+                        <School size={16}/> Misiones de Escuela
+                      </div>
+                      <div className="mt-1">
+                          <span className="bg-violet-100 text-violet-700 text-[10px] font-black px-3 py-0.5 rounded-full border border-violet-200">
+                              {getWeekDateRange(schoolTask.weekId)}
+                          </span>
                       </div>
                    </div>
 
-                   <div className={`
-                      grid grid-cols-2 gap-3 pt-8 pb-6 px-4 rounded-[2.5rem] border-4 border-dashed
-                      ${isSchool ? 'bg-violet-50/50 border-violet-200' : 'bg-emerald-50/50 border-emerald-200'}
-                   `}>
-                      {Object.entries(task.status).map(([key, completed]) => {
+                   <div className="grid grid-cols-2 gap-3 pt-12 pb-6 px-4 rounded-[2.5rem] border-4 border-dashed bg-violet-50/50 border-violet-200">
+                      {Object.entries(schoolTask.status).map(([key, completed]) => {
                           const visual = getTaskVisuals(key);
                           return (
                             <div key={key} className={`
@@ -971,7 +1088,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                                
                                {completed && (
                                   <div className="absolute -bottom-3 bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full border-b-2 border-yellow-600 shadow-sm flex items-center gap-1">
-                                    +{isSchool ? 20 : 25} <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3 object-contain"/>
+                                    +20 <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3 object-contain"/>
                                   </div>
                                )}
                             </div>
@@ -979,11 +1096,122 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                       })}
                    </div>
                 </div>
-              );
-            })}
+            )}
+
+            {homeTask && (
+                <div key={homeTask.id} className="relative">
+                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 w-full px-4 text-center">
+                      <div className="inline-flex items-center gap-2 bg-emerald-500 border-b-4 border-emerald-700 text-white px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest shadow-lg">
+                        <Home size={16}/> Misiones del Hogar
+                      </div>
+                      <div className="mt-1">
+                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-3 py-0.5 rounded-full border border-emerald-200">
+                              {getWeekDateRange(homeTask.weekId)}
+                          </span>
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-3 pt-12 pb-6 px-4 rounded-[2.5rem] border-4 border-dashed bg-emerald-50/50 border-emerald-200">
+                      {Object.entries(homeTask.status).map(([key, completed]) => {
+                          const visual = getTaskVisuals(key);
+                          return (
+                            <div key={key} className={`
+                                relative aspect-square rounded-3xl p-3 flex flex-col items-center justify-center text-center transition-all duration-300 group
+                                ${completed 
+                                  ? `${visual.color} shadow-lg scale-100 border-b-[6px]` 
+                                  : 'bg-white border-2 border-slate-200 text-slate-300 shadow-sm scale-95'
+                                }
+                            `}>
+                               <div className={`
+                                  mb-2 p-2 rounded-2xl transition-transform duration-500
+                                  ${completed 
+                                    ? 'bg-white/20 rotate-0 scale-110 shadow-inner' 
+                                    : 'bg-slate-100 grayscale opacity-50 group-hover:scale-110'
+                                  }
+                               `}>
+                                  {visual.icon}
+                               </div>
+
+                               <span className={`
+                                  text-[10px] sm:text-xs font-black uppercase leading-tight
+                                  ${completed ? 'opacity-100' : 'opacity-60'}
+                               `}>
+                                  {visual.label}
+                               </span>
+
+                               {completed && (
+                                  <div className="absolute -top-2 -right-2 bg-white text-emerald-600 rounded-full p-1 border-2 border-emerald-100 shadow-sm animate-bounce-slow">
+                                      <CheckCircle2 size={16} strokeWidth={4} />
+                                  </div>
+                               )}
+                               
+                               {completed && (
+                                  <div className="absolute -bottom-3 bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full border-b-2 border-yellow-600 shadow-sm flex items-center gap-1">
+                                    +25 <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3 object-contain"/>
+                                  </div>
+                               )}
+                            </div>
+                          );
+                      })}
+                   </div>
+                </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* MODAL HISTORIAL DE MISIONES */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
+             <div className="bg-slate-800 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-slate-600 relative overflow-hidden flex flex-col max-h-[90vh]">
+                 <div className="bg-slate-700 p-6 text-center relative border-b-4 border-slate-900">
+                     <button onClick={() => setShowHistoryModal(false)} className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-slate-600">
+                        <X size={20} />
+                     </button>
+                     <div className="inline-block p-3 bg-slate-600 rounded-2xl backdrop-blur-sm border-2 border-slate-500 mb-2">
+                        <History size={32} className="text-white"/>
+                     </div>
+                     <h3 className="text-xl font-black text-white">Historial de Misiones</h3>
+                     <p className="text-slate-400 text-xs font-bold mt-1">Tu progreso semana a semana</p>
+                 </div>
+
+                 <div className="p-6 overflow-y-auto bg-slate-800 flex-1 space-y-4">
+                     {studentWeeks.length === 0 ? (
+                         <div className="text-center py-10 text-slate-500 font-bold">No hay historial aún.</div>
+                     ) : (
+                         studentWeeks.map((week, idx) => {
+                             const isPerfect = week.completion >= 100;
+                             const isGood = week.completion >= 80;
+                             
+                             return (
+                                 <div key={week.weekId} className="bg-slate-700 p-4 rounded-2xl border border-slate-600 relative overflow-hidden">
+                                     <div className="flex justify-between items-center mb-2 relative z-10">
+                                         <div>
+                                             <span className="text-white font-black text-sm block">Semana {week.weekId.split('-W')[1]}</span>
+                                             <span className="text-slate-400 text-[10px] font-bold uppercase">{getWeekDateRange(week.weekId)}</span>
+                                         </div>
+                                         <div className="flex items-center gap-2">
+                                             <span className={`text-xl font-black ${isPerfect ? 'text-yellow-400' : isGood ? 'text-emerald-400' : 'text-white'}`}>
+                                                 {Math.round(week.completion)}%
+                                             </span>
+                                             {isPerfect && <Medal size={24} className="text-yellow-400 fill-yellow-400 animate-bounce-slow"/>}
+                                         </div>
+                                     </div>
+                                     <div className="h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-800 relative z-10">
+                                         <div 
+                                            className={`h-full transition-all duration-500 ${isPerfect ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : isGood ? 'bg-emerald-500' : 'bg-slate-500'}`} 
+                                            style={{width: `${week.completion}%`}}
+                                         ></div>
+                                     </div>
+                                     {isPerfect && <div className="absolute inset-0 bg-yellow-400/5 z-0"></div>}
+                                 </div>
+                             );
+                         })
+                     )}
+                 </div>
+             </div>
+        </div>
+      )}
 
       {showArcade && (
          <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/95 backdrop-blur-md animate-fade-in text-white p-4 overflow-y-auto">
