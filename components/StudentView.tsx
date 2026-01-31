@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest } from '../types';
+import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest, SavingsGoal, ExpenseCategory } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { soundService } from '../services/soundService';
 import { STUDENT_AVATARS as AVATAR_OPTIONS } from './RoleSelector'; 
-import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus } from 'lucide-react';
+import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus, Target, Mountain, Heart, Star, SmilePlus, Meh, Frown } from 'lucide-react';
 
 interface StudentViewProps {
   student: User;
@@ -387,12 +387,20 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [cashingOut, setCashingOut] = useState(false);
 
-  // Expense Modal State (Previously Shop)
+  // Expense Modal State
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseReason, setExpenseReason] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>('WANT');
   const [expenseHistory, setExpenseHistory] = useState<ExpenseRequest[]>([]);
   const [submittingExpense, setSubmittingExpense] = useState(false);
+
+  // Savings Goals State
+  const [showGoalsModal, setShowGoalsModal] = useState(false);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+  const [newGoalTarget, setNewGoalTarget] = useState('');
+  const [isCreatingGoal, setIsCreatingGoal] = useState(false);
 
   // Avatar Modal State
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -418,12 +426,16 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
     const expensesSub = supabaseService.subscribeToChanges('expense_requests', `student_id=eq.${student.uid}`, () => {
         loadExpenses();
     });
+    const goalsSub = supabaseService.subscribeToChanges('savings_goals', `student_id=eq.${student.uid}`, () => {
+        loadGoals();
+    });
 
     return () => {
         tasksSub.unsubscribe();
         profileSub.unsubscribe();
         quizSub.unsubscribe();
         expensesSub.unsubscribe();
+        goalsSub.unsubscribe();
     };
   }, [student.uid]);
 
@@ -444,6 +456,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       setExpenseHistory(ex);
   };
 
+  const loadGoals = async () => {
+      const g = await supabaseService.getSavingsGoals(student.uid);
+      setGoals(g);
+  };
+
   const openArcade = () => {
       loadQuizData();
       setShowArcade(true);
@@ -452,6 +469,11 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const openExpenseModal = () => {
       loadExpenses();
       setShowExpenseModal(true);
+  };
+
+  const openGoalsModal = () => {
+      loadGoals();
+      setShowGoalsModal(true);
   };
 
   const handleExpenseRequest = async (e: React.FormEvent) => {
@@ -464,7 +486,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       }
 
       setSubmittingExpense(true);
-      const result = await supabaseService.requestExpense(student.uid, amount, expenseReason);
+      const result = await supabaseService.requestExpense(student.uid, amount, expenseReason, expenseCategory);
       setSubmittingExpense(false);
 
       if (result.success) {
@@ -475,6 +497,76 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       } else {
           alert("Error: " + result.error);
       }
+  };
+
+  const handleCreateGoal = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const amount = parseInt(newGoalTarget);
+      if (!amount || amount <= 0 || !newGoalTitle.trim()) return;
+
+      setIsCreatingGoal(true);
+      const result = await supabaseService.createSavingsGoal(student.uid, newGoalTitle, amount);
+      setIsCreatingGoal(false);
+
+      if (result.success) {
+          setNewGoalTitle('');
+          setNewGoalTarget('');
+          loadGoals();
+          soundService.playSuccess();
+      } else {
+          alert("Error: " + result.error);
+      }
+  };
+
+  const handleDepositToGoal = async (goalId: string) => {
+      const amountStr = prompt("¿Cuántos MiniBits quieres guardar?");
+      if (!amountStr) return;
+      const amount = parseInt(amountStr);
+      if (isNaN(amount) || amount <= 0) return;
+
+      if (amount > student.balance) {
+          alert("No tienes suficientes fondos.");
+          return;
+      }
+
+      const result = await supabaseService.depositToGoal(goalId, amount);
+      if (result.success) {
+          soundService.playCoin();
+          loadGoals();
+          refreshUser(); // Balance changed
+      } else {
+          alert("Error: " + result.error);
+      }
+  };
+
+  const handleWithdrawFromGoal = async (goalId: string) => {
+      const amountStr = prompt("¿Cuántos MiniBits quieres sacar de la meta?");
+      if (!amountStr) return;
+      const amount = parseInt(amountStr);
+      if (isNaN(amount) || amount <= 0) return;
+
+      const result = await supabaseService.withdrawFromGoal(goalId, amount);
+      if (result.success) {
+          soundService.playPop();
+          loadGoals();
+          refreshUser();
+      } else {
+          alert("Error: " + result.error);
+      }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+      if (confirm("¿Borrar esta meta? El dinero volverá a tu bolsa.")) {
+          await supabaseService.deleteGoal(goalId);
+          loadGoals();
+          refreshUser();
+      }
+  };
+
+  const handleSentiment = async (requestId: string, sentiment: 'HAPPY' | 'NEUTRAL' | 'SAD') => {
+      await supabaseService.updateExpenseSentiment(requestId, sentiment);
+      loadExpenses();
+      soundService.playPop();
   };
 
   const checkForCelebration = (loadedTasks: TaskLog[]) => {
@@ -719,9 +811,33 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
           >
              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
              <div className="bg-white/20 p-2.5 rounded-full mb-1 group-hover:scale-110 transition-transform">
-               <PiggyBank size={28} strokeWidth={3} />
+               <ShoppingBag size={28} strokeWidth={3} />
              </div>
              <span className="text-base tracking-tight leading-none">Mis Gastos</span>
+          </button>
+      </div>
+
+      {/* TILE DE MIS METAS (NUEVO) */}
+      <div className="grid grid-cols-1">
+          <button 
+             onClick={openGoalsModal}
+             className="bg-indigo-500 hover:bg-indigo-400 active:translate-y-1 active:border-b-0 text-white rounded-[2rem] p-6 border-b-[6px] border-indigo-700 flex flex-row items-center justify-between font-black transition-all shadow-lg shadow-indigo-200 relative overflow-hidden group"
+          >
+             <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+             <div className="flex items-center gap-4 relative z-10">
+                <div className="bg-white/20 p-3 rounded-2xl group-hover:scale-110 transition-transform">
+                  <Target size={32} strokeWidth={3} />
+                </div>
+                <div className="text-left">
+                    <span className="text-lg tracking-tight leading-none block">Mis Metas de Ahorro</span>
+                    <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Guarda para tus sueños</span>
+                </div>
+             </div>
+             <div className="relative z-10 bg-indigo-800/30 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                 <span className="text-2xl font-black">{goals.length}</span>
+                 <Mountain size={20} className="opacity-50"/>
+             </div>
+             <Mountain className="absolute -right-6 -bottom-6 text-indigo-900/20 rotate-12" size={120} />
           </button>
       </div>
 
@@ -1009,7 +1125,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                         <X size={20} />
                      </button>
                      <div className="inline-block p-3 bg-white/20 rounded-2xl backdrop-blur-sm border-2 border-white/30 mb-2">
-                        <PiggyBank size={32} className="text-white"/>
+                        <ShoppingBag size={32} className="text-white"/>
                      </div>
                      <h3 className="text-xl font-black text-white">Solicitar Gasto</h3>
                      <p className="text-rose-100 text-xs font-bold mt-1">Pide permiso a tus padres para usar tus ahorros</p>
@@ -1047,6 +1163,30 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                                 className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-sm text-slate-700 focus:border-rose-400 outline-none transition-all"
                              />
                          </div>
+                         
+                         {/* CLASIFICACIÓN NECESIDAD vs DESEO */}
+                         <div>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 pl-2">¿Qué tipo de gasto es?</label>
+                             <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setExpenseCategory('NEED')}
+                                    className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'NEED' ? 'bg-emerald-100 border-emerald-400 text-emerald-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`}
+                                >
+                                    <Heart size={24} className={expenseCategory === 'NEED' ? 'fill-emerald-500' : ''}/>
+                                    <span className="text-[10px] font-black uppercase">Lo Necesito</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setExpenseCategory('WANT')}
+                                    className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'WANT' ? 'bg-pink-100 border-pink-400 text-pink-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`}
+                                >
+                                    <Star size={24} className={expenseCategory === 'WANT' ? 'fill-pink-500' : ''}/>
+                                    <span className="text-[10px] font-black uppercase">Lo Quiero</span>
+                                </button>
+                             </div>
+                         </div>
+
                          <button 
                             disabled={submittingExpense || !expenseAmount || !expenseReason}
                             className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-rose-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-100 disabled:opacity-50"
@@ -1064,23 +1204,174 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                          ) : (
                              <div className="space-y-3">
                                  {expenseHistory.map(req => (
-                                     <div key={req.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                                         <div>
-                                             <p className="font-bold text-slate-700 text-xs">{req.description}</p>
-                                             <div className="flex items-center gap-1 mt-1">
-                                                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider
-                                                    ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : ''}
-                                                    ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : ''}
-                                                    ${req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' : ''}
-                                                 `}>
-                                                     {req.status === 'APPROVED' ? 'Aprobado' : req.status === 'PENDING' ? 'Esperando' : 'Rechazado'}
-                                                 </span>
-                                             </div>
+                                     <div key={req.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-2">
+                                         <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-slate-700 text-xs">{req.description}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider
+                                                        ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : ''}
+                                                        ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : ''}
+                                                        ${req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' : ''}
+                                                    `}>
+                                                        {req.status === 'APPROVED' ? 'Aprobado' : req.status === 'PENDING' ? 'Esperando' : 'Rechazado'}
+                                                    </span>
+                                                    {req.category === 'NEED' && <Heart size={12} className="text-emerald-400 fill-emerald-400"/>}
+                                                    {req.category === 'WANT' && <Star size={12} className="text-pink-400 fill-pink-400"/>}
+                                                </div>
+                                            </div>
+                                            <span className="font-black text-slate-800 text-sm">-{req.amount} MB</span>
                                          </div>
-                                         <span className="font-black text-slate-800 text-sm">-{req.amount} MB</span>
+                                         
+                                         {/* SENTIMENT REACTION FOR APPROVED ITEMS */}
+                                         {req.status === 'APPROVED' && (
+                                             <div className="border-t border-slate-50 pt-2 flex items-center justify-between">
+                                                 <span className="text-[9px] font-bold text-slate-400">¿Cómo te sientes?</span>
+                                                 <div className="flex gap-2">
+                                                     <button 
+                                                        onClick={() => handleSentiment(req.id, 'HAPPY')}
+                                                        className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'HAPPY' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`}
+                                                     >
+                                                         <SmilePlus size={18} className="text-emerald-500" />
+                                                     </button>
+                                                     <button 
+                                                        onClick={() => handleSentiment(req.id, 'NEUTRAL')}
+                                                        className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'NEUTRAL' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`}
+                                                     >
+                                                         <Meh size={18} className="text-amber-500" />
+                                                     </button>
+                                                     <button 
+                                                        onClick={() => handleSentiment(req.id, 'SAD')}
+                                                        className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'SAD' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`}
+                                                     >
+                                                         <Frown size={18} className="text-rose-500" />
+                                                     </button>
+                                                 </div>
+                                             </div>
+                                         )}
                                      </div>
                                  ))}
                              </div>
+                         )}
+                     </div>
+                 </div>
+             </div>
+        </div>
+      )}
+
+      {/* MODAL METAS DE AHORRO (SAVINGS GOALS) */}
+      {showGoalsModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
+             <div className="bg-indigo-900 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-indigo-500 relative overflow-hidden flex flex-col max-h-[90vh]">
+                 <div className="bg-indigo-800 p-6 text-center relative border-b-4 border-indigo-950">
+                     <button onClick={() => setShowGoalsModal(false)} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700">
+                        <X size={20} />
+                     </button>
+                     <div className="inline-block p-3 bg-indigo-500/20 rounded-2xl backdrop-blur-sm border-2 border-indigo-400/30 mb-2">
+                        <Mountain size={32} className="text-indigo-200"/>
+                     </div>
+                     <h3 className="text-xl font-black text-white">Mis Metas</h3>
+                     <p className="text-indigo-200 text-xs font-bold mt-1">Ahorra para conseguir tus sueños</p>
+                 </div>
+
+                 <div className="p-6 overflow-y-auto bg-indigo-900 flex-1">
+                     
+                     {/* CREATE NEW GOAL */}
+                     <div className="bg-indigo-950/50 p-4 rounded-2xl border-2 border-indigo-800 mb-6">
+                         <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest mb-3">Nueva Meta</h4>
+                         <form onSubmit={handleCreateGoal} className="flex gap-2 items-end">
+                             <div className="flex-1 space-y-2">
+                                <input 
+                                    type="text" 
+                                    value={newGoalTitle}
+                                    onChange={e => setNewGoalTitle(e.target.value)}
+                                    placeholder="¿Qué quieres comprar?"
+                                    className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none"
+                                />
+                                <div className="relative">
+                                    <input 
+                                        type="number" 
+                                        value={newGoalTarget}
+                                        onChange={e => setNewGoalTarget(e.target.value)}
+                                        placeholder="Precio"
+                                        className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none pr-8"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">MB</span>
+                                </div>
+                             </div>
+                             <button 
+                                disabled={isCreatingGoal || !newGoalTitle || !newGoalTarget}
+                                className="h-full bg-emerald-500 text-white p-3 rounded-xl border-b-4 border-emerald-700 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
+                             >
+                                {isCreatingGoal ? <RefreshCw className="animate-spin" size={20}/> : <Plus size={20} strokeWidth={3}/>}
+                             </button>
+                         </form>
+                     </div>
+
+                     {/* GOALS LIST */}
+                     <div className="space-y-4">
+                         {goals.length === 0 ? (
+                             <div className="text-center text-indigo-400 text-xs font-bold py-8 border-2 border-dashed border-indigo-800 rounded-2xl">
+                                 No tienes metas de ahorro aún.
+                             </div>
+                         ) : (
+                             goals.map(goal => {
+                                 const progress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100);
+                                 const isComplete = goal.currentAmount >= goal.targetAmount;
+
+                                 return (
+                                     <div key={goal.id} className="bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group">
+                                         {isComplete && (
+                                             <div className="absolute inset-0 bg-emerald-500/90 z-20 flex flex-col items-center justify-center text-white animate-fade-in">
+                                                 <PartyPopper size={40} className="animate-bounce mb-2"/>
+                                                 <span className="font-black text-lg uppercase tracking-widest">¡Logrado!</span>
+                                                 <button 
+                                                    onClick={() => handleDeleteGoal(goal.id)}
+                                                    className="mt-4 bg-white text-emerald-600 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-50 transition-colors"
+                                                 >
+                                                     Completar y Borrar
+                                                 </button>
+                                             </div>
+                                         )}
+
+                                         <div className="flex justify-between items-start mb-2">
+                                             <h4 className="font-black text-slate-800 text-lg">{goal.title}</h4>
+                                             <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1"><X size={16}/></button>
+                                         </div>
+                                         
+                                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                                             <span>{goal.currentAmount} MB</span>
+                                             <span>{goal.targetAmount} MB</span>
+                                         </div>
+                                         
+                                         <div className="h-4 bg-slate-100 rounded-full overflow-hidden mb-4 border border-slate-200">
+                                             <div 
+                                                className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 transition-all duration-500 relative"
+                                                style={{width: `${progress}%`}}
+                                             >
+                                                 <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                             </div>
+                                         </div>
+
+                                         <div className="flex gap-2">
+                                             <button 
+                                                onClick={() => handleDepositToGoal(goal.id)}
+                                                className="flex-1 bg-indigo-500 text-white py-2 rounded-xl font-bold text-xs border-b-4 border-indigo-700 active:border-b-0 active:translate-y-1 transition-all"
+                                             >
+                                                 Guardar +
+                                             </button>
+                                             {goal.currentAmount > 0 && (
+                                                 <button 
+                                                    onClick={() => handleWithdrawFromGoal(goal.id)}
+                                                    className="px-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs border-b-4 border-slate-300 active:border-b-0 active:translate-y-1 transition-all"
+                                                 >
+                                                     Sacar -
+                                                 </button>
+                                             )}
+                                         </div>
+                                     </div>
+                                 );
+                             })
                          )}
                      </div>
                  </div>

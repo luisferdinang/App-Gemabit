@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole, ExpenseRequest } from '../types';
+import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole, ExpenseRequest, SavingsGoal, ExpenseCategory } from '../types';
 
 // Helper to generate Week ID
 export const getCurrentWeekId = () => {
@@ -211,6 +211,7 @@ export const supabaseService = {
        const { error: trErr } = await supabase.from('transactions').delete().eq('student_id', uid);
        const { error: qErr } = await supabase.from('quiz_results').delete().eq('student_id', uid);
        const { error: eErr } = await supabase.from('expense_requests').delete().eq('student_id', uid);
+       const { error: sErr } = await supabase.from('savings_goals').delete().eq('student_id', uid);
        
        const { error: hardError } = await supabase.from('profiles').delete().eq('id', uid);
        
@@ -438,7 +439,7 @@ export const supabaseService = {
 
   // --- EXPENSE REQUESTS (GASTOS) ---
   
-  requestExpense: async (studentId: string, amount: number, description: string): Promise<{success: boolean, error?: string}> => {
+  requestExpense: async (studentId: string, amount: number, description: string, category: ExpenseCategory): Promise<{success: boolean, error?: string}> => {
       // Validate balance locally first
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
       if (!student || student.balance < amount) return { success: false, error: 'No tienes suficientes MiniBits.' };
@@ -448,6 +449,7 @@ export const supabaseService = {
           amount,
           description,
           status: 'PENDING',
+          category,
           created_at: Date.now()
       });
 
@@ -468,8 +470,14 @@ export const supabaseService = {
           amount: r.amount,
           description: r.description,
           status: r.status,
+          category: r.category,
+          sentiment: r.sentiment,
           createdAt: r.created_at
       }));
+  },
+
+  updateExpenseSentiment: async (requestId: string, sentiment: 'HAPPY' | 'NEUTRAL' | 'SAD') => {
+      await supabase.from('expense_requests').update({ sentiment }).eq('id', requestId);
   },
 
   getPendingExpensesForParent: async (studentIds: string[]): Promise<ExpenseRequest[]> => {
@@ -489,6 +497,7 @@ export const supabaseService = {
               amount: r.amount,
               description: r.description,
               status: r.status,
+              category: r.category,
               createdAt: r.created_at,
               studentName: s?.display_name || 'Hijo',
               studentAvatar: s?.avatar_url || ''
@@ -524,6 +533,80 @@ export const supabaseService = {
 
   rejectExpense: async (requestId: string) => {
       await supabase.from('expense_requests').update({ status: 'REJECTED' }).eq('id', requestId);
+      return { success: true };
+  },
+
+  // --- SAVINGS GOALS (METAS) ---
+
+  createSavingsGoal: async (studentId: string, title: string, targetAmount: number): Promise<{success: boolean, error?: string}> => {
+      const { error } = await supabase.from('savings_goals').insert({
+          student_id: studentId,
+          title,
+          target_amount: targetAmount,
+          current_amount: 0,
+          created_at: Date.now()
+      });
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+  },
+
+  getSavingsGoals: async (studentId: string): Promise<SavingsGoal[]> => {
+      const { data } = await supabase.from('savings_goals').select('*').eq('student_id', studentId);
+      return (data || []).map(g => ({
+          id: g.id,
+          studentId: g.student_id,
+          title: g.title,
+          targetAmount: g.target_amount,
+          currentAmount: g.current_amount,
+          icon: g.icon
+      }));
+  },
+
+  depositToGoal: async (goalId: string, amount: number) => {
+      // 1. Get Goal
+      const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
+      if (!goal) return { success: false, error: 'Meta no encontrada' };
+
+      // 2. Get Student Balance
+      const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
+      if (!student || student.balance < amount) return { success: false, error: 'Saldo insuficiente' };
+
+      // 3. Transactions (Move money)
+      // Decrease Balance
+      await supabase.from('profiles').update({ balance: student.balance - amount }).eq('id', goal.student_id);
+      // Increase Goal
+      await supabase.from('savings_goals').update({ current_amount: goal.current_amount + amount }).eq('id', goalId);
+      
+      return { success: true };
+  },
+
+  withdrawFromGoal: async (goalId: string, amount: number) => {
+      // 1. Get Goal
+      const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
+      if (!goal) return { success: false, error: 'Meta no encontrada' };
+      if (goal.current_amount < amount) return { success: false, error: 'Fondos insuficientes en la meta' };
+
+      // 2. Get Student
+      const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
+      if (!student) return { success: false, error: 'Error de usuario' };
+
+      // 3. Transactions
+      // Increase Balance
+      await supabase.from('profiles').update({ balance: student.balance + amount }).eq('id', goal.student_id);
+      // Decrease Goal
+      await supabase.from('savings_goals').update({ current_amount: goal.current_amount - amount }).eq('id', goalId);
+
+      return { success: true };
+  },
+
+  deleteGoal: async (goalId: string) => {
+      // Should probably return funds to balance first, but for simplicity we assume empty or deleted with funds
+      // Ideally trigger a withdraw of all funds first.
+      const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
+      if (goal && goal.current_amount > 0) {
+          await supabaseService.withdrawFromGoal(goalId, goal.current_amount);
+      }
+      await supabase.from('savings_goals').delete().eq('id', goalId);
       return { success: true };
   }
 };

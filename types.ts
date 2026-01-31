@@ -46,8 +46,9 @@ export interface Transaction {
   type: 'EARN' | 'SPEND';
 }
 
-// EXPENSE REQUESTS (New)
+// EXPENSE REQUESTS (Updated)
 export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type ExpenseCategory = 'NEED' | 'WANT';
 
 export interface ExpenseRequest {
   id: string;
@@ -55,10 +56,22 @@ export interface ExpenseRequest {
   amount: number;
   description: string;
   status: ExpenseStatus;
+  category?: ExpenseCategory; // New: Need vs Want
+  sentiment?: 'HAPPY' | 'NEUTRAL' | 'SAD'; // New: Post-purchase feeling
   createdAt: number;
   // Optional mapped fields for UI
   studentName?: string;
   studentAvatar?: string;
+}
+
+// SAVINGS GOALS (New)
+export interface SavingsGoal {
+  id: string;
+  studentId: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  icon: string; // Just a string identifier for now
 }
 
 // GAME TYPES
