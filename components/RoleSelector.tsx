@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { supabaseService } from '../services/supabaseService';
-import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info } from 'lucide-react';
+import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info, Download, Share, PlusSquare, X, Smartphone } from 'lucide-react';
 
 interface RoleSelectorProps {
   onLogin: (user: User) => void;
 }
 
 // COLECCIÓN DE ROBOTS PARA NIÑOS (12 Opciones)
-// Estilo: bottts (Divertidos, coloridos, sin expresiones tristes)
 export const STUDENT_AVATARS = [
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Gizmo", name: "Gizmo" },
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Felix", name: "Felix" },
@@ -25,7 +24,6 @@ export const STUDENT_AVATARS = [
 ];
 
 // COLECCIÓN DE PERSONAS PARA PADRES (8 Opciones)
-// Estilo: micah (Moderno, limpio, profesional)
 export const PARENT_AVATARS = [
   { url: "https://api.dicebear.com/9.x/micah/svg?seed=George", name: "Papá 1" },
   { url: "https://api.dicebear.com/9.x/micah/svg?seed=Leah", name: "Mamá 1" },
@@ -52,6 +50,53 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // PWA Install State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [showIOSModal, setShowIOSModal] = useState(false);
+
+  useEffect(() => {
+    // 1. Detect Install State
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsInstalled(true);
+    }
+
+    // 2. Detect iOS
+    const isIOSDevice = 
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && 
+      !(window as any).MSStream;
+    setIsIOS(isIOSDevice);
+
+    // 3. Check for Global Deferred Prompt
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+    }
+
+    // 4. Listen for PWA Ready Event
+    const handlePwaReady = () => {
+      setDeferredPrompt((window as any).deferredPrompt);
+    };
+    window.addEventListener('pwa-ready', handlePwaReady);
+
+    return () => {
+      window.removeEventListener('pwa-ready', handlePwaReady);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else if (isIOS) {
+      setShowIOSModal(true);
+    }
+  };
+
   const resetForm = () => {
     setUsername('');
     setPassword('');
@@ -59,7 +104,6 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
     setSecurityCode('');
     setError('');
     setSuccessMsg('');
-    // Reset avatar based on current tab
     setSelectedAvatar(activeTab === 'ALUMNO' ? STUDENT_AVATARS[0].url : PARENT_AVATARS[0].url);
   };
 
@@ -122,15 +166,13 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
   const handleTabChange = (role: UserRole) => {
       setActiveTab(role);
-      // Automatically select the first avatar of the new list to avoid showing a robot for a parent
       if (role === 'ALUMNO') {
           setSelectedAvatar(STUDENT_AVATARS[0].url);
       } else if (role === 'PADRE') {
           setSelectedAvatar(PARENT_AVATARS[0].url);
       }
       resetForm();
-      setActiveTab(role); // Re-set because resetForm clears it if not handled carefully, though here resetForm uses activeTab so order matters or we pass it.
-      // Actually resetForm reads state, so let's set state then update avatar manually
+      setActiveTab(role); 
   };
 
   const TabButton = ({ role, icon: Icon, label }: { role: UserRole; icon: any; label: string }) => (
@@ -151,9 +193,22 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   const currentAvatarOptions = activeTab === 'PADRE' ? PARENT_AVATARS : STUDENT_AVATARS;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
-      <div className="w-full max-w-md bg-white rounded-[2rem] shadow-xl border-b-8 border-slate-200 overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans relative">
+      <div className="w-full max-w-md bg-white rounded-[2rem] shadow-xl border-b-8 border-slate-200 overflow-hidden relative z-10">
         <div className="bg-violet-500 p-8 text-center relative overflow-hidden">
+           {/* INSTALL BUTTON */}
+           {(!isInstalled && (deferredPrompt || isIOS)) && (
+             <div className="absolute top-4 left-4 z-20">
+                <button 
+                  onClick={handleInstallClick}
+                  className="text-xs font-black bg-white/20 text-white px-3 py-1.5 rounded-full hover:bg-white/30 transition-all border-2 border-white/20 flex items-center gap-1.5 animate-bounce-slow"
+                >
+                  <Download size={14} strokeWidth={3} />
+                  INSTALAR
+                </button>
+             </div>
+           )}
+
            <div className="relative z-10 flex flex-col items-center">
              <img 
                 src="https://i.ibb.co/kVhqQ0K9/gemabit.png" 
@@ -170,7 +225,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                   setMode(mode === 'LOGIN' ? 'REGISTER' : 'LOGIN');
                   resetForm();
                 }}
-                className="text-xs font-bold bg-white/20 text-white px-3 py-1 rounded-full hover:bg-white/30 transition-colors border-2 border-white/20"
+                className="text-xs font-bold bg-white/20 text-white px-3 py-1.5 rounded-full hover:bg-white/30 transition-colors border-2 border-white/20"
               >
                 {mode === 'LOGIN' ? 'Crear Cuenta' : 'Tengo Cuenta'}
               </button>
@@ -302,6 +357,46 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
           </form>
         </div>
       </div>
+
+      {/* IOS INSTRUCTION MODAL */}
+      {showIOSModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50 backdrop-blur-sm animate-fade-in">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-6 relative shadow-2xl border-4 border-slate-200">
+              <button 
+                onClick={() => setShowIOSModal(false)}
+                className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+              
+              <div className="text-center mb-4">
+                 <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <Smartphone size={32} className="text-slate-400"/>
+                 </div>
+                 <h3 className="text-xl font-black text-slate-800">Instalar en iOS</h3>
+                 <p className="text-xs text-slate-400 font-bold mt-1">Sigue estos pasos para instalar la App</p>
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border-2 border-slate-100">
+                 <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 bg-white rounded-full border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-500 shrink-0">1</span>
+                    <p className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                       Toca el botón <Share size={14} className="text-sky-500"/> Compartir
+                    </p>
+                 </div>
+                 <div className="w-full h-px bg-slate-200"></div>
+                 <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 bg-white rounded-full border-2 border-slate-200 flex items-center justify-center font-black text-xs text-slate-500 shrink-0">2</span>
+                    <p className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                       Busca <PlusSquare size={14} className="text-sky-500"/> "Añadir a inicio"
+                    </p>
+                 </div>
+              </div>
+              
+              <button onClick={() => setShowIOSModal(false)} className="w-full mt-4 bg-slate-800 text-white font-black py-3 rounded-xl">Entendido</button>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
