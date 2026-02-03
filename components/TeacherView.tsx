@@ -14,6 +14,8 @@ import {
   Heart, SmilePlus, Meh, Frown
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
+import { getWeekDateRange } from '../utils/dateUtils';
+import { getGameVisual } from '../utils/gameUtils';
 
 interface TeacherViewProps {
   currentUser: User;
@@ -375,17 +377,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       setAssignedTo('ALL'); 
   };
   
-  const getGameVisual = (type: QuizType) => {
-      switch(type) {
-          case 'TEXT': return { icon: <MessageCircleQuestion size={20}/>, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200', label: 'Pregunta' };
-          case 'SENTENCE': return { icon: <Puzzle size={20}/>, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', label: 'Frase' };
-          case 'SORTING': return { icon: <Layers size={20}/>, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', label: 'Categoría' };
-          case 'SECRET_WORD': return { icon: <Key size={20}/>, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', label: 'Palabra Secreta' };
-          case 'INTRUDER': return { icon: <Ghost size={20}/>, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200', label: 'El Intruso' };
-          default: return { icon: <Gamepad2 size={20}/>, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', label: 'Juego' };
-      }
-  };
-
   const activeStudentData = useMemo(() => students.find(s => s.uid === selectedStudent), [students, selectedStudent]);
 
   // Derived metrics for Presentation Mode

@@ -3,34 +3,11 @@ import { User, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
 import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock } from 'lucide-react';
+import { getWeekDateRange } from '../utils/dateUtils';
 
 interface ParentViewProps {
   currentUser: User;
 }
-
-// Helper para fechas (Duplicado para aislamiento del componente)
-const getWeekDateRange = (weekId: string) => {
-  try {
-    const [yearStr, weekStr] = weekId.split('-W');
-    const year = parseInt(yearStr);
-    const week = parseInt(weekStr);
-    
-    const simple = new Date(year, 0, 1 + (week - 1) * 7);
-    const dow = simple.getDay();
-    const isoWeekStart = simple;
-    if (dow <= 4) isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
-    else isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
-
-    const start = new Date(isoWeekStart);
-    const end = new Date(isoWeekStart);
-    end.setDate(end.getDate() + 6);
-
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${start.toLocaleDateString('es-ES', options)} - ${end.toLocaleDateString('es-ES', options)}`;
-  } catch (e) {
-    return 'Semana';
-  }
-};
 
 export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [children, setChildren] = useState<User[]>([]);

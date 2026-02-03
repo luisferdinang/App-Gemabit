@@ -1,223 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest, SavingsGoal, ExpenseCategory, Transaction } from '../types';
+import { User, TaskLog, Quiz, QuizResult, ExpenseRequest, SavingsGoal, ExpenseCategory, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
-import { TaskController } from './TaskController';
 import { 
   X, TrendingUp, ArrowUpCircle, ArrowDownCircle, History, Calendar, Plus, 
   ShoppingBag, PiggyBank, Wallet, CheckCircle2, Gamepad2, Trophy, Star, 
-  Sparkles, RefreshCw, AlertCircle, Check, Diamond, QrCode, PlayCircle, Coins,
-  Target, Mountain, Send, Clock, Pencil, Menu, LayoutDashboard, ChevronDown, Lock,
-  Puzzle, Layers, Key, Ghost, MessageCircleQuestion, Heart, Zap, ShieldCheck, 
-  Smile, HeartHandshake, Hand, BookOpen, School, Home, Medal, PartyPopper, 
-  SmilePlus, Meh, Frown
+  RefreshCw, Check, Diamond, QrCode, PlayCircle, Coins,
+  Target, Mountain, Send, Clock, Pencil, ChevronDown, Lock,
+  School, Home, Medal, PartyPopper, SmilePlus, Meh, Frown, Heart
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { STUDENT_AVATARS as AVATAR_OPTIONS } from './RoleSelector';
+import { getWeekDateRange } from '../utils/dateUtils';
+import { getGameTypeStyles } from '../utils/gameUtils';
+import { getTaskVisuals } from '../utils/taskUtils';
+import { SentenceGame } from './games/SentenceGame';
+import { SortingGame } from './games/SortingGame';
+import { SecretWordGame } from './games/SecretWordGame';
+import { IntruderGame } from './games/IntruderGame';
 
 interface StudentViewProps {
   student: User;
   refreshUser: () => void;
 }
 
-const getWeekDateRange = (weekId: string) => {
-  try {
-    const [yearStr, weekStr] = weekId.split('-W');
-    const year = parseInt(yearStr);
-    const week = parseInt(weekStr);
-    
-    // Simple calculation for Monday of the ISO week
-    const simple = new Date(year, 0, 1 + (week - 1) * 7);
-    const dow = simple.getDay();
-    const isoWeekStart = simple;
-    if (dow <= 4)
-        isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
-    else
-        isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
-
-    const start = new Date(isoWeekStart);
-    const end = new Date(isoWeekStart);
-    end.setDate(end.getDate() + 6);
-
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${start.toLocaleDateString('es-ES', options)} - ${end.toLocaleDateString('es-ES', options)}`;
-  } catch (e) {
-    return 'Semana Actual';
-  }
-};
-
-const getGameTypeStyles = (type: QuizType) => {
-  switch (type) {
-    case 'SENTENCE': return { label: 'Construir Frase', icon: <Puzzle size={24} />, color: 'bg-orange-500', light: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-600' };
-    case 'SORTING': return { label: 'Clasificar', icon: <Layers size={24} />, color: 'bg-violet-500', light: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-600' };
-    case 'SECRET_WORD': return { label: 'Palabra Secreta', icon: <Key size={24} />, color: 'bg-pink-500', light: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-600' };
-    case 'INTRUDER': return { label: 'El Intruso', icon: <Ghost size={24} />, color: 'bg-indigo-500', light: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-600' };
-    case 'TEXT': default: return { label: 'Pregunta Rápida', icon: <MessageCircleQuestion size={24} />, color: 'bg-sky-500', light: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-600' };
-  }
-};
-
-const SentenceGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const [availableWords, setAvailableWords] = useState<QuizGameItem[]>([]);
-  const [placedWords, setPlacedWords] = useState<(QuizGameItem | null)[]>([]);
-  useEffect(() => { if (quiz.gameItems) { const shuffled = [...quiz.gameItems].sort(() => Math.random() - 0.5); setAvailableWords(shuffled); setPlacedWords(new Array(quiz.gameItems.length).fill(null)); } }, [quiz]);
-  const handlePlaceWord = (word: QuizGameItem) => { const firstEmptyIndex = placedWords.findIndex(w => w === null); if (firstEmptyIndex !== -1) { const newPlaced = [...placedWords]; newPlaced[firstEmptyIndex] = word; setPlacedWords(newPlaced); setAvailableWords(prev => prev.filter(w => w.id !== word.id)); } };
-  const handleRemoveWord = (word: QuizGameItem, index: number) => { const newPlaced = [...placedWords]; newPlaced[index] = null; setPlacedWords(newPlaced); setAvailableWords(prev => [...prev, word]); };
-  const checkAnswer = () => { const currentSentence = placedWords.map(w => w?.text).join(' '); const correctSentence = quiz.gameItems?.map(w => w.text).join(' '); if (currentSentence === correctSentence) { onComplete(); } else { alert("Mmm... algo no suena bien. ¡Inténtalo de nuevo!"); if (quiz.gameItems) { setAvailableWords([...quiz.gameItems].sort(() => Math.random() - 0.5)); setPlacedWords(new Array(quiz.gameItems.length).fill(null)); } } };
-  return ( <div className="space-y-6"> <div className="flex flex-wrap gap-2 min-h-[60px] p-4 bg-slate-100 rounded-2xl border-2 border-slate-200 justify-center items-center"> {placedWords.map((word, idx) => ( <button key={idx} onClick={() => word && handleRemoveWord(word, idx)} className={`h-12 min-w-[60px] px-3 rounded-xl font-bold text-sm shadow-sm transition-all border-b-4 flex items-center justify-center ${word ? 'bg-white border-slate-300 text-slate-700 animate-pop' : 'bg-slate-200/50 border-slate-300/50 border-dashed'} `} > {word?.text} </button> ))} </div> <div className="flex flex-wrap gap-3 justify-center"> {availableWords.map(word => ( <button key={word.id} onClick={() => handlePlaceWord(word)} className="bg-sky-500 text-white px-4 py-3 rounded-xl font-black border-b-4 border-sky-700 active:translate-y-1 active:border-b-0 transition-all shadow-lg shadow-sky-200" > {word.text} </button> ))} </div> <div className="pt-4"> <button onClick={checkAnswer} disabled={placedWords.some(w => w === null)} className="w-full bg-emerald-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-emerald-700 active:translate-y-1 active:border-b-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed" > ¡Comprobar Frase! </button> </div> </div> );
-};
-const SortingGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const [queue, setQueue] = useState<QuizGameItem[]>([]); const [currentItem, setCurrentItem] = useState<QuizGameItem | null>(null);
-  useEffect(() => { if (quiz.gameItems) { setQueue([...quiz.gameItems]); } }, [quiz]);
-  useEffect(() => { if (queue.length > 0 && !currentItem) { setCurrentItem(queue[0]); } else if (queue.length === 0 && !currentItem) { onComplete(); } }, [queue, currentItem]);
-  const handleSort = (category: 'NEED' | 'WANT') => { if (!currentItem) return; if (currentItem.category === category) { setQueue(prev => prev.slice(1)); setCurrentItem(null); } else { alert(`¡Ops! ${currentItem.text} es ${currentItem.category === 'NEED' ? 'una Necesidad' : 'un Capricho'}.`); setQueue(prev => prev.slice(1)); setCurrentItem(null); } };
-  if (!currentItem) return <div className="text-center font-bold text-slate-400">¡Terminado!</div>;
-  return ( <div className="space-y-8 py-4"> <div className="flex justify-center"> <div className="w-40 h-40 bg-white rounded-[2rem] shadow-xl border-4 border-slate-100 flex items-center justify-center p-4 text-center animate-bounce-slow relative z-10"> <span className="text-2xl font-black text-slate-700 break-words leading-tight">{currentItem.text}</span> </div> </div> <div className="grid grid-cols-2 gap-6"> <button onClick={() => handleSort('NEED')} className="flex flex-col items-center gap-2 bg-emerald-100 hover:bg-emerald-200 border-4 border-emerald-300 rounded-3xl p-6 transition-colors" > <div className="p-3 bg-emerald-500 text-white rounded-full"><Check size={32}/></div> <span className="font-black text-emerald-800 uppercase tracking-wider">Necesidad</span> </button> <button onClick={() => handleSort('WANT')} className="flex flex-col items-center gap-2 bg-rose-100 hover:bg-rose-200 border-4 border-rose-300 rounded-3xl p-6 transition-colors" > <div className="p-3 bg-rose-500 text-white rounded-full"><Sparkles size={32}/></div> <span className="font-black text-rose-800 uppercase tracking-wider">Capricho</span> </button> </div> </div> );
-};
-
-// 3. Secret Word Game (Improved Logic & Visuals)
-const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const originalWord = quiz.answer?.trim().toUpperCase() || '';
-  
-  // Custom normalization: Accents -> Base, but keep Ñ
-  const normalizeChar = (char: string) => {
-      return char
-        .replace(/[ÁÀÄÂ]/g, 'A')
-        .replace(/[ÉÈËÊ]/g, 'E')
-        .replace(/[ÍÌÏÎ]/g, 'I')
-        .replace(/[ÓÒÖÔ]/g, 'O')
-        .replace(/[ÚÙÜÛ]/g, 'U');
-      // Ñ is NOT replaced, so it stays Ñ
-  };
-
-  const normalizedSecret = useMemo(() => {
-      return originalWord.split('').map(normalizeChar).join('');
-  }, [originalWord]);
-
-  const [guessedLetters, setGuessedLetters] = useState<Set<string>>(new Set());
-  const [mistakes, setMistakes] = useState(0);
-  const maxLives = 6;
-
-  const handleGuess = (letter: string) => {
-    if (guessedLetters.has(letter) || mistakes >= maxLives) return;
-
-    const newGuessed = new Set(guessedLetters);
-    newGuessed.add(letter);
-    setGuessedLetters(newGuessed);
-
-    // Check against normalized secret (where Ñ is Ñ, but Á is A)
-    if (!normalizedSecret.includes(letter)) {
-      setMistakes(prev => prev + 1);
-      soundService.playPop(); 
-    } else {
-      soundService.playCoin();
-    }
-  };
-
-  useEffect(() => {
-    // Win Condition: All alpha characters in normalizedSecret must be in guessedLetters
-    const isWin = normalizedSecret.split('').every(char => {
-        if (!"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(char)) return true; // Ignore spaces/symbols
-        return guessedLetters.has(char);
-    });
-
-    if (isWin && normalizedSecret.length > 0) {
-      setTimeout(onComplete, 1000);
-    }
-  }, [guessedLetters, normalizedSecret]);
-
-  useEffect(() => {
-      if (mistakes >= maxLives) {
-          alert(`¡Oh no! Se acabaron los intentos. La palabra era: ${originalWord}`);
-      }
-  }, [mistakes]);
-
-  const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".split('');
-
-  return (
-    <div className="space-y-8">
-       {/* Hearts */}
-       <div className="flex justify-center gap-2 mb-4 bg-pink-50 p-2 rounded-2xl w-fit mx-auto border border-pink-100">
-          {[...Array(maxLives)].map((_, i) => (
-             <Heart 
-               key={i} 
-               size={28} 
-               className={`${i < (maxLives - mistakes) ? 'text-pink-500 fill-pink-500 animate-pulse' : 'text-slate-200 fill-slate-200'}`} 
-             />
-          ))}
-       </div>
-
-       {/* Word Display (Dashes Style) */}
-       <div className="flex flex-wrap justify-center gap-3 min-h-[80px] p-6 bg-slate-50/50 rounded-3xl border border-slate-100">
-          {originalWord.split('').map((originalChar, index) => {
-             const normChar = normalizeChar(originalChar);
-             const isSpace = originalChar === ' ';
-             const isSymbol = !"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(normChar);
-             const isGuessed = guessedLetters.has(normChar);
-             
-             // Show if guessed, space, or special symbol
-             const isVisible = isGuessed || isSpace || isSymbol;
-
-             return (
-               <div key={index} className="flex flex-col items-center gap-1">
-                   {/* Container for letter + dash */}
-                   <div className={`w-10 h-14 flex items-end justify-center pb-1 ${isSpace ? '' : 'border-b-4 border-slate-800'}`}>
-                      <span className={`font-black text-3xl text-slate-800 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                        {originalChar}
-                      </span>
-                   </div>
-               </div>
-             )
-          })}
-       </div>
-
-       {/* Keyboard (Larger Keys) */}
-       <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
-          {alphabet.map(letter => {
-             const isGuessed = guessedLetters.has(letter);
-             const isCorrect = normalizedSecret.includes(letter);
-             
-             let btnClass = "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm";
-             if (isGuessed) {
-                btnClass = isCorrect 
-                    ? "bg-emerald-500 border-emerald-700 text-white shadow-emerald-200 opacity-50" 
-                    : "bg-slate-200 border-slate-300 text-slate-400 opacity-50";
-             }
-
-             return (
-               <button
-                 key={letter}
-                 onClick={() => handleGuess(letter)}
-                 disabled={isGuessed || mistakes >= maxLives}
-                 className={`w-12 h-16 rounded-2xl font-black text-xl border-b-[6px] active:border-b-0 active:translate-y-1 transition-all ${btnClass}`}
-               >
-                 {letter}
-               </button>
-             )
-          })}
-       </div>
-    </div>
-  );
-};
-
-const IntruderGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const handleSelect = (index: number) => { if (index === quiz.correctIndex) { onComplete(); } else { alert("Ese sí pertenece al grupo. ¡Busca el diferente!"); } };
-  return ( <div className="grid grid-cols-2 gap-4 py-4"> {quiz.options?.map((opt, idx) => ( <button key={idx} onClick={() => handleSelect(idx)} className="aspect-square bg-white rounded-3xl border-4 border-slate-100 shadow-sm hover:border-indigo-400 hover:shadow-lg transition-all flex items-center justify-center p-4 active:scale-95 group" > <span className="font-black text-slate-700 text-lg group-hover:text-indigo-600">{opt}</span> </button> ))} </div> );
-};
-
-const getTaskVisuals = (key: string) => {
-  const k = key.toUpperCase();
-  if (k.includes('ATTENDANCE')) return { icon: <Zap size={32} />, label: 'Asistencia Rayo', color: 'bg-yellow-400 text-yellow-900 border-yellow-600' };
-  if (k.includes('RESPONSIBILITY')) return { icon: <ShieldCheck size={32} />, label: 'Super Responsable', color: 'bg-blue-400 text-white border-blue-600' };
-  if (k.includes('BEHAVIOR')) return { icon: <Smile size={32} />, label: 'Buen Comportamiento', color: 'bg-purple-400 text-white border-purple-600' };
-  if (k.includes('RESPECT')) return { icon: <HeartHandshake size={32} />, label: 'Respeto Total', color: 'bg-pink-400 text-white border-pink-600' };
-  if (k.includes('PARTICIPATION')) return { icon: <Hand size={32} />, label: 'Participación', color: 'bg-orange-400 text-white border-orange-600' };
-  if (k.includes('CHORES')) return { icon: <Sparkles size={32} />, label: 'Ayuda en Casa', color: 'bg-emerald-400 text-white border-emerald-600' };
-  if (k.includes('HYGIENE')) return { icon: <Sparkles size={32} />, label: 'Higiene Brillante', color: 'bg-cyan-400 text-white border-cyan-600' };
-  if (k.includes('READING') || k.includes('STUDY')) return { icon: <BookOpen size={32} />, label: 'Genio Leyendo', color: 'bg-indigo-400 text-white border-indigo-600' };
-  return { icon: <Trophy size={32} />, label: key, color: 'bg-slate-400 text-white border-slate-600' };
-};
-
 export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }) => {
-  const [activeTab, setActiveTab] = useState<'TASKS' | 'ARCADE'>('TASKS');
   const [tasks, setTasks] = useState<TaskLog[]>([]);
   
   // Quiz Arcade State
@@ -371,7 +177,6 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
       setShowHistoryModal(true);
   };
 
-  // ... (Keeping existing handlers) ...
   const handleExpenseRequest = async (e: React.FormEvent) => { e.preventDefault(); const amount = parseInt(expenseAmount); if (!amount || amount <= 0 || !expenseReason.trim()) return; if (amount > student.balance) { alert("No tienes suficientes MiniBits."); return; } setSubmittingExpense(true); const result = await supabaseService.requestExpense(student.uid, amount, expenseReason, expenseCategory); setSubmittingExpense(false); if (result.success) { setExpenseAmount(''); setExpenseReason(''); alert("¡Solicitud enviada a tus padres!"); loadExpenses(); } else { alert("Error: " + result.error); } };
   const handleSaveGoal = async (e: React.FormEvent) => { e.preventDefault(); const amountGB = parseFloat(newGoalTarget); if (!amountGB || amountGB <= 0 || !newGoalTitle.trim()) return; setIsCreatingGoal(true); let result; if (editingGoalId) { result = await supabaseService.updateSavingsGoal(editingGoalId, newGoalTitle, Math.round(amountGB * 100)); } else { result = await supabaseService.createSavingsGoal(student.uid, newGoalTitle, Math.round(amountGB * 100)); } setIsCreatingGoal(false); if (result.success) { setNewGoalTitle(''); setNewGoalTarget(''); setEditingGoalId(null); loadGoals(); soundService.playSuccess(); } else { alert("Error: " + result.error); } };
   const startEditingGoal = (goal: SavingsGoal) => { setEditingGoalId(goal.id); setNewGoalTitle(goal.title); setNewGoalTarget((goal.targetAmount / 100).toString()); };
@@ -395,7 +200,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
   const { filteredTransactions, totalEarned, totalSpent } = useMemo(() => { const now = new Date(); now.setHours(0, 0, 0, 0); const filtered = financeTransactions.filter(t => { const tDate = new Date(t.timestamp); tDate.setHours(0, 0, 0, 0); if (financeTimeframe === 'DAY') return tDate.getTime() === now.getTime(); if (financeTimeframe === 'WEEK') { const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7); return tDate >= weekAgo; } if (financeTimeframe === 'MONTH') { const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30); return tDate >= monthAgo; } return true; }); const earned = filtered.filter(t => t.type === 'EARN').reduce((sum, t) => sum + t.amount, 0); const spent = filtered.filter(t => t.type === 'SPEND').reduce((sum, t) => sum + Math.abs(t.amount), 0); return { filteredTransactions: filtered, totalEarned: earned, totalSpent: spent }; }, [financeTransactions, financeTimeframe]);
   const weeklyProgress = useMemo(() => { let totalTasks = 0; let completedTasks = 0; tasks.forEach(t => { totalTasks += Object.keys(t.status).length; completedTasks += Object.values(t.status).filter(Boolean).length; }); return totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0; }, [tasks]);
 
-  const renderActiveGame = () => { if (!activeQuiz) return null; switch (activeQuiz.type) { case 'SENTENCE': return <SentenceGameComponent quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SORTING': return <SortingGameComponent quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SECRET_WORD': return <SecretWordGameComponent quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'INTRUDER': return <IntruderGameComponent quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'TEXT': default: return ( <div className="space-y-3 mb-6"> {activeQuiz.options?.map((opt, idx) => ( <button key={idx} onClick={() => handleTextAnswer(idx)} className="w-full text-left p-4 rounded-2xl border-4 border-slate-100 font-bold text-slate-600 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-all active:scale-95 text-lg" > {opt} </button> ))} </div> ); } };
+  const renderActiveGame = () => { if (!activeQuiz) return null; switch (activeQuiz.type) { case 'SENTENCE': return <SentenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SORTING': return <SortingGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SECRET_WORD': return <SecretWordGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'INTRUDER': return <IntruderGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'TEXT': default: return ( <div className="space-y-3 mb-6"> {activeQuiz.options?.map((opt, idx) => ( <button key={idx} onClick={() => handleTextAnswer(idx)} className="w-full text-left p-4 rounded-2xl border-4 border-slate-100 font-bold text-slate-600 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-all active:scale-95 text-lg" > {opt} </button> ))} </div> ); } };
 
   const schoolTask = tasks.find(t => t.type === 'SCHOOL');
   const homeTask = tasks.find(t => t.type === 'HOME');
