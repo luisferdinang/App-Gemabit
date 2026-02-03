@@ -1,12 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { User, ExpenseRequest } from '../types';
-import { supabaseService } from '../services/supabaseService';
+import { User, ExpenseRequest, Transaction } from '../types';
+import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Clock, Calendar } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock } from 'lucide-react';
 
 interface ParentViewProps {
   currentUser: User;
 }
+
+// Helper para fechas (Duplicado para aislamiento del componente)
+const getWeekDateRange = (weekId: string) => {
+  try {
+    const [yearStr, weekStr] = weekId.split('-W');
+    const year = parseInt(yearStr);
+    const week = parseInt(weekStr);
+    
+    const simple = new Date(year, 0, 1 + (week - 1) * 7);
+    const dow = simple.getDay();
+    const isoWeekStart = simple;
+    if (dow <= 4) isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    else isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
+
+    const start = new Date(isoWeekStart);
+    const end = new Date(isoWeekStart);
+    end.setDate(end.getDate() + 6);
+
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+    return `${start.toLocaleDateString('es-ES', options)} - ${end.toLocaleDateString('es-ES', options)}`;
+  } catch (e) {
+    return 'Semana';
+  }
+};
 
 export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [children, setChildren] = useState<User[]>([]);
@@ -14,59 +38,59 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [isLinking, setIsLinking] = useState(false);
   const [linkCode, setLinkCode] = useState('');
   
-  // Expenses State
+  // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
-  const [childHistoryExpenses, setChildHistoryExpenses] = useState<ExpenseRequest[]>([]);
+  const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
 
-  // 1. Carga inicial y suscripción a cambios del PADRE (Vinculación) y BALANCE hijos
+  // Week Navigation State
+  const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentWeekId());
+
+  // 1. Carga inicial
   useEffect(() => {
     loadParentData();
     
-    // Escuchar cambios en el perfil del PADRE (ej. cuando se vincula un hijo nuevo)
-    const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => {
-        console.log("Perfil padre actualizado, recargando...");
-        loadParentData();
-    });
-
-    // Escuchar cambios en los perfiles de los HIJOS (ej. cambio de balance/puntos)
-    // Nota: Escuchamos todos los perfiles para simplificar, ya que no sabemos los IDs al montar el componente
-    const subProfiles = supabaseService.subscribeToChanges('profiles', undefined, () => {
-        loadParentData();
-    });
-
-    // Escuchar nuevas solicitudes de gastos (PENDING)
-    const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => {
-        loadParentData();
+    const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => { loadParentData(); });
+    const subProfiles = supabaseService.subscribeToChanges('profiles', undefined, () => { loadParentData(); });
+    const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => { loadParentData(); });
+    const subTransactions = supabaseService.subscribeToChanges('transactions', undefined, () => {
         if (selectedChild) loadChildHistory(selectedChild);
+    });
+    // Escuchar tareas para actualizar historial de semanas
+    const subTasks = supabaseService.subscribeToChanges('tasks', undefined, () => {
+        if (selectedChild) loadChildWeeks(selectedChild);
     });
 
     return () => {
         subParent.unsubscribe();
         subProfiles.unsubscribe();
         subExpenses.unsubscribe();
+        subTransactions.unsubscribe();
+        subTasks.unsubscribe();
     };
   }, [currentUser.uid]);
 
-  // 2. Efecto para cargar historial cuando cambia el niño seleccionado
+  // 2. Efecto para cargar historial y semanas cuando cambia el niño
   useEffect(() => {
       if (selectedChild) {
           loadChildHistory(selectedChild);
+          loadChildWeeks(selectedChild);
+          setSelectedWeek(getCurrentWeekId()); // Reset to current week on child switch
       } else {
-          setChildHistoryExpenses([]);
+          setChildTransactions([]);
+          setAvailableWeeks([]);
       }
   }, [selectedChild]);
 
   const loadParentData = async () => {
-    // Recargar el perfil del padre para asegurar que tenemos los linkedStudentIds actualizados
     const updatedParent = await supabaseService.getStudentById(currentUser.uid); 
     const linkedIds = updatedParent?.linkedStudentIds || currentUser.linkedStudentIds || [];
 
     if (linkedIds.length > 0) {
-      const allStudents = await supabaseService.getStudents(); // Podría optimizarse, pero sirve para filtrar
+      const allStudents = await supabaseService.getStudents();
       const myKids = allStudents.filter(s => linkedIds.includes(s.uid));
       setChildren(myKids);
       
-      // Si no hay seleccionado o el seleccionado ya no está en la lista, seleccionar el primero
       if (myKids.length > 0 && (!selectedChild || !myKids.find(k => k.uid === selectedChild))) {
         setSelectedChild(myKids[0].uid);
       }
@@ -77,8 +101,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   };
 
   const loadChildHistory = async (childId: string) => {
-      const history = await supabaseService.getExpenseRequests(childId);
-      setChildHistoryExpenses(history);
+      const transactions = await supabaseService.getTransactions(childId);
+      setChildTransactions(transactions);
+  };
+
+  const loadChildWeeks = async (childId: string) => {
+      const weeks = await supabaseService.getStudentWeeks(childId);
+      // Asegurar que la semana actual esté en la lista aunque no tenga tareas
+      const current = getCurrentWeekId();
+      if (!weeks.find(w => w.weekId === current)) {
+          weeks.push({ weekId: current, completion: 0 });
+      }
+      // Ordenar descendente (más reciente primero)
+      weeks.sort((a, b) => b.weekId.localeCompare(a.weekId));
+      setAvailableWeeks(weeks);
   };
 
   const handleLink = async (e: React.FormEvent) => {
@@ -88,33 +124,48 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       alert("¡Vinculación exitosa!");
       setIsLinking(false);
       setLinkCode('');
-      // No necesitamos llamar a loadParentData() manualmente aquí porque la suscripción 'subParent' lo detectará
     } catch (err) {
       alert("Código incorrecto o error al vincular");
     }
   };
   
-  // Callback for immediate update when Parent marks a task
   const handleChildUpdate = () => {
-      loadParentData(); // Refresh balances
+      loadParentData(); 
+      if (selectedChild) {
+          loadChildHistory(selectedChild);
+          loadChildWeeks(selectedChild);
+      }
   };
 
   const handleApproveExpense = async (id: string) => {
       const result = await supabaseService.approveExpense(id);
-      if (result && !result.success) {
-          alert("Error: " + result.error);
-      }
-      // La suscripción recargará los datos
+      if (result && !result.success) alert("Error: " + result.error);
   };
 
   const handleRejectExpense = async (id: string) => {
       await supabaseService.rejectExpense(id);
-      // La suscripción recargará los datos
   };
 
   const activeKid = children.find(c => c.uid === selectedChild);
   const gemCount = activeKid ? Math.floor(activeKid.balance / 100) : 0;
   const miniBitCount = activeKid ? activeKid.balance % 100 : 0;
+  const isPastWeek = selectedWeek !== getCurrentWeekId();
+
+  // --- VISUAL HELPERS ---
+  const getTransactionVisuals = (t: Transaction) => {
+      const desc = t.description.toUpperCase();
+      const isEarn = t.type === 'EARN';
+
+      if (!isEarn) {
+          if (desc.includes('AHORRO')) return { icon: <Coins size={18}/>, bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Ahorro' };
+          return { icon: <TrendingDown size={18}/>, bg: 'bg-rose-100', text: 'text-rose-600', label: 'Gasto' };
+      }
+      if (desc.includes('QUIZ') || desc.includes('JUEGO')) return { icon: <Gamepad2 size={18}/>, bg: 'bg-sky-100', text: 'text-sky-600', label: 'Arcade' };
+      if (desc.includes('SCHOOL') || desc.includes('ASISTENCIA')) return { icon: <School size={18}/>, bg: 'bg-violet-100', text: 'text-violet-600', label: 'Escuela' };
+      if (desc.includes('HOME') || desc.includes('HOGAR')) return { icon: <Home size={18}/>, bg: 'bg-emerald-100', text: 'text-emerald-600', label: 'Casa' };
+      if (desc.includes('RETIRO')) return { icon: <Coins size={18}/>, bg: 'bg-indigo-100', text: 'text-indigo-600', label: 'Retiro Meta' };
+      return { icon: <Sparkles size={18}/>, bg: 'bg-amber-100', text: 'text-amber-600', label: 'Premio' };
+  };
 
   return (
     <div>
@@ -146,7 +197,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         </div>
       )}
       
-      {/* PENDING EXPENSE REQUESTS ALERT SECTION */}
+      {/* PENDING EXPENSE ALERT */}
       {pendingExpenses.length > 0 && (
           <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-pulse-slow">
               <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2">
@@ -227,17 +278,13 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                         <div>
                            <h2 className="text-2xl font-black">{activeKid.displayName}</h2>
                            <div className="flex flex-wrap gap-3 mt-2">
-                              {/* Gemabit Main Display */}
                               <span className="bg-white text-emerald-600 px-4 py-1.5 rounded-full text-sm font-black flex items-center gap-2 shadow-sm border-2 border-emerald-100">
                                 <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-5 h-5 object-contain" />
                                 {gemCount} GemaBits
                               </span>
-                              
-                              {/* Minibits Remainder */}
                               <span className="bg-white/20 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 backdrop-blur-sm border border-white/30">
                                 <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-4 h-4 object-contain" /> {miniBitCount} MiniBits
                               </span>
-
                               <span className="bg-white/20 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 backdrop-blur-sm border border-white/30">
                                 <Trophy size={14} className="text-orange-300" /> Racha: {activeKid.streakWeeks} Sem
                               </span>
@@ -245,30 +292,52 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                         </div>
                      </div>
                   </div>
-                  {/* Decorative */}
                   <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+               </div>
+
+               {/* WEEK SELECTOR */}
+               <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-full md:w-auto self-start">
+                   <div className="p-2 bg-slate-100 text-slate-500 rounded-xl"><Calendar size={20}/></div>
+                   <div className="relative flex-1">
+                       <select 
+                          value={selectedWeek} 
+                          onChange={(e) => setSelectedWeek(e.target.value)} 
+                          className="w-full appearance-none bg-transparent font-black text-slate-700 text-sm focus:outline-none pr-8 cursor-pointer"
+                       >
+                           {availableWeeks.map(week => (
+                               <option key={week.weekId} value={week.weekId}>
+                                   Semana {week.weekId.split('-W')[1]} ({week.weekId === getCurrentWeekId() ? 'Actual' : getWeekDateRange(week.weekId)})
+                               </option>
+                           ))}
+                       </select>
+                       <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                   </div>
                </div>
 
                {/* Dual Column Layout */}
                <div className="grid md:grid-cols-2 gap-6">
                   
-                  {/* HOME (Editable) */}
-                  <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm relative overflow-hidden">
+                  {/* HOME (Editable if current week) */}
+                  <div className={`rounded-[2rem] p-6 border-2 shadow-sm relative overflow-hidden transition-colors ${isPastWeek ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'}`}>
                      <div className="flex items-center gap-3 mb-6 relative z-10">
-                        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
-                           <Home size={24} strokeWidth={3} />
+                        <div className={`p-3 rounded-xl ${isPastWeek ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-600'}`}>
+                           {isPastWeek ? <Lock size={24}/> : <Home size={24} strokeWidth={3} />}
                         </div>
                         <div>
                            <h3 className="font-black text-slate-700 text-lg">Misiones del Hogar</h3>
-                           <p className="text-xs text-slate-400 font-bold">Toca para aprobar</p>
+                           <p className="text-xs text-slate-400 font-bold">{isPastWeek ? 'Historial (Solo lectura)' : 'Toca para aprobar'}</p>
                         </div>
                      </div>
-                     <TaskController studentId={activeKid.uid} allowedType="HOME" onUpdate={handleChildUpdate} />
-                     {/* Decorative bg */}
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-10 -mt-10 opacity-50"></div>
+                     <TaskController 
+                        studentId={activeKid.uid} 
+                        allowedType="HOME" 
+                        weekId={selectedWeek}
+                        onUpdate={handleChildUpdate} 
+                        readOnly={isPastWeek}
+                     />
                   </div>
 
-                  {/* SCHOOL (Read Only) */}
+                  {/* SCHOOL (Always Read Only) */}
                   <div className="bg-slate-50 rounded-[2rem] p-6 border-2 border-slate-100 relative overflow-hidden">
                      <div className="flex items-center gap-3 mb-6 relative z-10">
                         <div className="p-3 bg-violet-100 text-violet-600 rounded-xl">
@@ -279,51 +348,60 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                            <p className="text-xs text-slate-400 font-bold">Gestionado por la Maestra</p>
                         </div>
                      </div>
-                     {/* Pass readOnly=true so parents can't edit school tasks */}
-                     <TaskController studentId={activeKid.uid} allowedType="SCHOOL" readOnly={true} />
+                     <TaskController 
+                        studentId={activeKid.uid} 
+                        allowedType="SCHOOL" 
+                        readOnly={true} 
+                        weekId={selectedWeek}
+                     />
                   </div>
 
                </div>
 
-               {/* EXPENSE HISTORY SECTION */}
+               {/* TRANSACTION HISTORY SECTION */}
                <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm">
                    <div className="flex items-center gap-3 mb-6">
-                       <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
+                       <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
                            <History size={24} strokeWidth={3} />
                        </div>
                        <div>
-                           <h3 className="font-black text-slate-700 text-lg">Historial de Gastos</h3>
-                           <p className="text-xs text-slate-400 font-bold">Solicitudes pasadas de {activeKid.displayName.split(' ')[0]}</p>
+                           <h3 className="font-black text-slate-700 text-lg">Historial de Movimientos</h3>
+                           <p className="text-xs text-slate-400 font-bold">Ganancias (Escuela, Casa, Arcade) y Gastos</p>
                        </div>
                    </div>
 
-                   {childHistoryExpenses.length === 0 ? (
+                   {childTransactions.length === 0 ? (
                        <p className="text-center text-slate-400 font-bold text-xs py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                           No hay historial de gastos.
+                           No hay movimientos registrados.
                        </p>
                    ) : (
-                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                           {childHistoryExpenses.map((exp) => {
-                               const date = new Date(exp.createdAt).toLocaleDateString();
+                       <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                           {childTransactions.map((t) => {
+                               const date = new Date(t.timestamp).toLocaleDateString();
+                               const isEarn = t.type === 'EARN';
+                               const visuals = getTransactionVisuals(t);
+
                                return (
-                                   <div key={exp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                       <div>
-                                           <p className="font-black text-slate-700 text-xs">{exp.description}</p>
-                                           <div className="flex items-center gap-2 mt-1">
-                                               <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
-                                                   <Calendar size={10}/> {date}
-                                               </span>
-                                               <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase
-                                                   ${exp.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-600' : ''}
-                                                   ${exp.status === 'REJECTED' ? 'bg-rose-100 text-rose-600' : ''}
-                                                   ${exp.status === 'PENDING' ? 'bg-amber-100 text-amber-600' : ''}
-                                               `}>
-                                                   {exp.status === 'APPROVED' ? 'Aprobado' : exp.status === 'REJECTED' ? 'Rechazado' : 'Pendiente'}
-                                               </span>
+                                   <div key={t.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
+                                       <div className="flex items-center gap-3">
+                                           <div className={`p-2.5 rounded-xl ${visuals.bg} ${visuals.text}`}>
+                                               {visuals.icon}
+                                           </div>
+                                           <div>
+                                               <p className="font-black text-slate-700 text-xs line-clamp-1">{t.description}</p>
+                                               <div className="flex items-center gap-2 mt-0.5">
+                                                   <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                                                       <Calendar size={10}/> {date}
+                                                   </span>
+                                                   <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide border ${visuals.bg} ${visuals.text} border-transparent bg-opacity-50`}>
+                                                       {visuals.label}
+                                                   </span>
+                                               </div>
                                            </div>
                                        </div>
-                                       <div className="font-black text-rose-500 text-sm flex items-center gap-1">
-                                           <TrendingDown size={14}/> -{exp.amount}
+                                       <div className={`font-black text-sm flex items-center gap-1 ${isEarn ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                           {isEarn ? '+' : ''}{t.amount} MB
+                                           {isEarn ? <ArrowUpCircle size={14}/> : <ArrowDownCircle size={14}/>}
                                        </div>
                                    </div>
                                );
