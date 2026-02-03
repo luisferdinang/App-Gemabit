@@ -4,9 +4,9 @@ import { User, TaskLog, Transaction, UserStatus, Quiz, StudentReport, QuizResult
 // Robots for Students
 const AVATAR_STUDENT_1 = `https://api.dicebear.com/9.x/bottts/svg?seed=Gizmo`;
 const AVATAR_STUDENT_2 = `https://api.dicebear.com/9.x/bottts/svg?seed=Sassy`;
-// Micah for Parents/Teachers
+// Micah for Teachers, Fluent 3D Object for Parents (CDN Fixed)
 const AVATAR_TEACHER = `https://api.dicebear.com/9.x/micah/svg?seed=Teacher&mouth=smile`;
-const AVATAR_PARENT = `https://api.dicebear.com/9.x/micah/svg?seed=George&baseColor=f9c9b6`;
+const AVATAR_PARENT = `https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis@master/Emojis/Activities/Soccer%20ball.png`;
 
 // Initial Mock Data
 let USERS_STORE: User[] = [
@@ -178,7 +178,7 @@ export const mockService = {
     const isStudent = userData.role === 'ALUMNO';
     const defaultAvatar = isStudent 
         ? `https://api.dicebear.com/9.x/bottts/svg?seed=${userData.username}`
-        : `https://api.dicebear.com/9.x/micah/svg?seed=${userData.username}`;
+        : `https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis@master/Emojis/Activities/Soccer%20ball.png`;
 
     const newUser: User = {
       uid: Date.now().toString(),

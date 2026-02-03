@@ -184,12 +184,18 @@ export const supabaseService = {
 
     const linkCode = userData.role === 'ALUMNO' ? Math.floor(100000 + Math.random() * 900000).toString() : null;
 
+    // Use 3D Objects for Parents, Robots for Students (CDN Fixed)
+    const isStudent = userData.role === 'ALUMNO';
+    const defaultAvatar = isStudent 
+        ? `https://api.dicebear.com/9.x/bottts/svg?seed=${userData.username}`
+        : `https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis@master/Emojis/Activities/Soccer%20ball.png`;
+
     const { error: dbError } = await supabase.from('profiles').insert({
       id: authData.user.id,
       role: userData.role,
       display_name: userData.displayName,
       username: userData.username,
-      avatar_url: userData.avatar,
+      avatar_url: userData.avatar || defaultAvatar,
       status: 'PENDING',
       balance: 0,
       xp: 0,

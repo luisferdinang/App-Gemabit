@@ -7,32 +7,44 @@ interface RoleSelectorProps {
   onLogin: (user: User) => void;
 }
 
-// COLECCIÓN DE ROBOTS PARA NIÑOS (12 Opciones)
+// COLECCIÓN DE ROBOTS PARA NIÑOS (12 Opciones: 6 Estilo Masculino/Neutro, 6 Estilo Femenino/Neutro)
 export const STUDENT_AVATARS = [
+  // Grupo A: Tonos Azules/Grises/Neutros
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Gizmo", name: "Gizmo" },
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Felix", name: "Felix" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Bubba", name: "Bubba" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Cuddles", name: "Cuddles" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Tank", name: "Tank" },
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Rock", name: "Rock" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Zoe", name: "Zoe" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Bear", name: "Bear" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Jack", name: "Jack" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Luka", name: "Luka" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Sassy", name: "Sassy" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Buster", name: "Buster" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Ziggy", name: "Ziggy" },
+  
+  // Grupo B: Tonos Rosas/Morados/Cálidos
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Lola", name: "Lola" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Kiki", name: "Kiki" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Bella", name: "Bella" },
   { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Coco", name: "Coco" },
-  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Lucky", name: "Lucky" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Mimi", name: "Mimi" },
+  { url: "https://api.dicebear.com/9.x/bottts/svg?seed=Sassy", name: "Sassy" },
 ];
 
-// COLECCIÓN DE PERSONAS PARA PADRES (8 Opciones)
+// COLECCIÓN DE OBJETOS 3D PARA PADRES (CDN Optimizado para evitar errores de carga)
+const FLUENT_CDN = "https://cdn.jsdelivr.net/gh/Tarikul-Islam-Anik/Animated-Fluent-Emojis@master/Emojis";
+
 export const PARENT_AVATARS = [
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=George", name: "Papá 1" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Leah", name: "Mamá 1" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Christopher", name: "Papá 2" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Jessica", name: "Mamá 2" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Sawyer", name: "Papá 3" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Emery", name: "Mamá 3" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Dale", name: "Papá 4" },
-  { url: "https://api.dicebear.com/9.x/micah/svg?seed=Ariel", name: "Mamá 4" },
+  // Masculinos / Neutros (Deportes, Gaming, Coches)
+  { url: `${FLUENT_CDN}/Activities/Soccer%20ball.png`, name: "Fútbol" },
+  { url: `${FLUENT_CDN}/Activities/Video%20game.png`, name: "Gamer" },
+  { url: `${FLUENT_CDN}/Travel%20and%20places/Automobile.png`, name: "Coche" },
+  { url: `${FLUENT_CDN}/Objects/Necktie.png`, name: "Corbata" },
+  { url: `${FLUENT_CDN}/Activities/Trophy.png`, name: "Campeón" },
+  { url: `${FLUENT_CDN}/Objects/Guitar.png`, name: "Música" },
+  
+  // Femeninos / Neutros (Moda, Joyas, Belleza)
+  { url: `${FLUENT_CDN}/Objects/Lipstick.png`, name: "Labial" },
+  { url: `${FLUENT_CDN}/Objects/Handbag.png`, name: "Bolso" },
+  { url: `${FLUENT_CDN}/Objects/High-heeled%20shoe.png`, name: "Tacones" },
+  { url: `${FLUENT_CDN}/Objects/Gem%20stone.png`, name: "Diamante" },
+  { url: `${FLUENT_CDN}/Objects/Crown.png`, name: "Reina" },
+  { url: `${FLUENT_CDN}/Objects/Ring.png`, name: "Anillo" },
 ];
 
 export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
@@ -248,7 +260,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
               <>
                <div>
                  <label className="block text-xs font-bold text-slate-400 mb-2 uppercase text-center">
-                    Elige tu Personaje ({activeTab === 'ALUMNO' ? 'Robots' : 'Avatar'})
+                    Elige tu Personaje ({activeTab === 'ALUMNO' ? 'Robots' : 'Objetos'})
                  </label>
                  <div className="grid grid-cols-4 gap-2 mb-4 max-h-48 overflow-y-auto pr-1">
                     {currentAvatarOptions.map((option) => (
@@ -256,13 +268,13 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                         key={option.url}
                         type="button"
                         onClick={() => setSelectedAvatar(option.url)}
-                        className={`relative rounded-2xl aspect-square p-1 border-4 transition-all flex items-center justify-center ${
+                        className={`relative rounded-2xl aspect-square p-2 border-4 transition-all flex items-center justify-center ${
                           selectedAvatar === option.url 
                             ? 'border-violet-500 scale-110 shadow-lg bg-violet-50 z-10' 
-                            : 'border-slate-100 hover:border-slate-300'
+                            : 'border-slate-100 hover:border-slate-300 bg-slate-50'
                         }`}
                       >
-                         <img src={option.url} alt={option.name} className="w-full h-full object-contain" />
+                         <img src={option.url} alt={option.name} className="w-full h-full object-contain drop-shadow-sm" />
                       </button>
                     ))}
                  </div>
