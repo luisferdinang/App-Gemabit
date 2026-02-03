@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Quiz } from '../../types';
-import { Heart } from 'lucide-react';
+import { Heart, RefreshCw } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 
 export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
@@ -42,6 +42,8 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
   };
 
   useEffect(() => {
+    if (!normalizedSecret) return;
+    
     // Win Condition: All alpha characters in normalizedSecret must be in guessedLetters
     const isWin = normalizedSecret.split('').every(char => {
         if (!"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(char)) return true; // Ignore spaces/symbols
@@ -59,6 +61,20 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
       }
   }, [mistakes]);
 
+  if (!originalWord) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-200 border-dashed text-center">
+        <div className="bg-white p-4 rounded-full mb-3 shadow-sm text-slate-300">
+            <RefreshCw size={32} />
+        </div>
+        <p className="text-slate-500 font-bold mb-1">¡Ups! Hubo un problema.</p>
+        <p className="text-xs text-slate-400 max-w-xs mx-auto">
+            La palabra secreta no se guardó correctamente. Dile a tu maestra que edite este juego.
+        </p>
+      </div>
+    );
+  }
+
   const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".split('');
 
   return (
@@ -74,8 +90,8 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
           ))}
        </div>
 
-       {/* Word Display (Dashes Style) */}
-       <div className="flex flex-wrap justify-center gap-3 min-h-[80px] p-6 bg-slate-50/50 rounded-3xl border border-slate-100">
+       {/* Word Display (Improved Dashes) */}
+       <div className="flex flex-wrap justify-center gap-3 min-h-[100px] px-2">
           {originalWord.split('').map((originalChar, index) => {
              const normChar = normalizeChar(originalChar);
              const isSpace = originalChar === ' ';
@@ -85,21 +101,25 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
              // Show if guessed, space, or special symbol
              const isVisible = isGuessed || isSpace || isSymbol;
 
+             if (isSpace) {
+                 return <div key={index} className="w-6"></div>;
+             }
+
              return (
-               <div key={index} className="flex flex-col items-center gap-1">
-                   {/* Container for letter + dash */}
-                   <div className={`w-10 h-14 flex items-end justify-center pb-1 ${isSpace ? '' : 'border-b-4 border-slate-800'}`}>
-                      <span className={`font-black text-3xl text-slate-800 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+               <div key={index} className="flex flex-col items-center justify-end w-10 h-16 relative">
+                   {/* Letter */}
+                   <span className={`font-black text-3xl text-slate-800 mb-1 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
                         {originalChar}
-                      </span>
-                   </div>
+                   </span>
+                   {/* Dash/Line */}
+                   <div className="w-full h-1.5 bg-slate-800 rounded-full opacity-80"></div>
                </div>
              )
           })}
        </div>
 
        {/* Keyboard (Larger Keys) */}
-       <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
+       <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto pt-4">
           {alphabet.map(letter => {
              const isGuessed = guessedLetters.has(letter);
              const isCorrect = normalizedSecret.includes(letter);

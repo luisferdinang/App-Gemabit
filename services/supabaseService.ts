@@ -398,6 +398,7 @@ export const supabaseService = {
         options: quiz.options, 
         correct_index: quiz.correctIndex, 
         game_items: quiz.gameItems, 
+        answer: quiz.answer,
         target_value: quiz.targetValue, 
         reward: quiz.reward, 
         difficulty: quiz.difficulty, 
@@ -414,7 +415,8 @@ export const supabaseService = {
     return (data || []).reverse().map(q => ({
       id: q.id, type: q.type, question: q.question, options: q.options, correctIndex: q.correct_index,
       gameItems: q.game_items, targetValue: q.target_value, reward: q.reward, difficulty: q.difficulty,
-      assignedTo: q.assigned_to, createdBy: q.created_by
+      assignedTo: q.assigned_to, createdBy: q.created_by,
+      answer: q.answer
     }));
   },
 
@@ -438,7 +440,8 @@ export const supabaseService = {
       .map(q => ({ 
         id: q.id, type: q.type, question: q.question, options: q.options, correctIndex: q.correct_index,
         gameItems: q.game_items, targetValue: q.target_value, reward: q.reward, difficulty: q.difficulty,
-        assignedTo: q.assigned_to, createdBy: q.created_by 
+        assignedTo: q.assigned_to, createdBy: q.created_by,
+        answer: q.answer 
       }));
 
     const completed: QuizResult[] = (results || []).map(r => ({
