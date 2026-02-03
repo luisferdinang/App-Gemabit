@@ -424,7 +424,8 @@ export const supabaseService = {
 
   deleteQuiz: async (quizId: string): Promise<{success: boolean, error?: string}> => {
     try {
-        const { error } = await supabase.from('quizzes').update({ assigned_to: 'DELETED_ARCHIVE' }).eq('id', quizId).select();
+        // HARD DELETE: Remove the row completely
+        const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
         if (error) return { success: false, error: error.message };
         return { success: true };
     } catch (err: any) {

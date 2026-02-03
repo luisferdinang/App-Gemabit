@@ -1209,6 +1209,36 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
           </div>
       )}
 
+      {/* ADDED: MODAL CONFIRMAR BORRAR JUEGO */}
+      {quizToDelete && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[110] backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-2xl border-4 border-slate-100 text-center relative overflow-hidden">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 border-4 border-red-50">
+              <Trash2 size={32} strokeWidth={2.5} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-2">¿Borrar este juego?</h3>
+            <p className="text-slate-500 text-xs font-bold mb-6 max-w-[200px] mx-auto leading-relaxed">
+              Esta acción no se puede deshacer. El juego desaparecerá para todos los alumnos.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setQuizToDelete(null)}
+                className="flex-1 py-3 bg-slate-100 text-slate-500 font-black rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteQuiz}
+                disabled={actionLoading}
+                className="flex-1 py-3 bg-red-500 text-white font-black rounded-xl shadow-lg border-b-4 border-red-700 active:border-b-0 active:translate-y-1 transition-all hover:bg-red-600 disabled:opacity-50"
+              >
+                {actionLoading ? <RefreshCw className="animate-spin mx-auto" size={20}/> : 'Sí, Borrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL GESTIONAR ALUMNO */}
       {showManageModal && studentToManage && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm animate-fade-in">
