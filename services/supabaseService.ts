@@ -392,8 +392,8 @@ export const supabaseService = {
 
   // QUIZ MANAGEMENT
   createTeacherQuiz: async (quiz: any): Promise<{success: boolean, error?: string}> => {
-    // FIX: Removed 'answer' from insert payload as column does not exist in DB schema
-    // The answer is now stored in options[0] for Secret Word games
+    // FIX: Remove 'answer' column insert.
+    // The secret word is now stored in 'options[0]' to bypass the missing schema column.
     const { error } = await supabase.from('quizzes').insert({ 
         type: quiz.type, 
         question: quiz.question, 
@@ -404,7 +404,8 @@ export const supabaseService = {
         reward: quiz.reward, 
         difficulty: quiz.difficulty, 
         assigned_to: quiz.assigned_to || quiz.assignedTo, 
-        created_by: 'TEACHER'
+        created_by: 'TEACHER',
+        // answer: quiz.answer // DO NOT UNCOMMENT UNTIL SCHEMA IS UPDATED
     });
     if (error) return { success: false, error: error.message };
     return { success: true };

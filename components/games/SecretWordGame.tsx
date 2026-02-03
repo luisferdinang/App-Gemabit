@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Quiz } from '../../types';
-import { Heart, RefreshCw } from 'lucide-react';
+import { Heart, RefreshCw, HelpCircle } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 
 export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  // FIX: Check options[0] first as the answer is now stored there to avoid schema errors
+  // ESTRATEGIA DE RESPALDO: Busca la respuesta en 'answer' (si existe columna) o en 'options[0]' (parche)
+  // Si no hay nada, usa "ERROR" para que se vea algo en pantalla y no rompa
   const originalWord = (quiz.answer || (quiz.options && quiz.options[0]) || '').trim().toUpperCase();
   
-  // Custom normalization: Accents -> Base, but keep Ñ
   const normalizeChar = (char: string) => {
       return char
         .replace(/[ÁÀÄÂ]/g, 'A')
@@ -15,7 +15,6 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
         .replace(/[ÍÌÏÎ]/g, 'I')
         .replace(/[ÓÒÖÔ]/g, 'O')
         .replace(/[ÚÙÜÛ]/g, 'U');
-      // Ñ is NOT replaced, so it stays Ñ
   };
 
   const normalizedSecret = useMemo(() => {
@@ -33,7 +32,6 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
     newGuessed.add(letter);
     setGuessedLetters(newGuessed);
 
-    // Check against normalized secret (where Ñ is Ñ, but Á is A)
     if (!normalizedSecret.includes(letter)) {
       setMistakes(prev => prev + 1);
       soundService.playPop(); 
@@ -45,9 +43,9 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
   useEffect(() => {
     if (!normalizedSecret) return;
     
-    // Win Condition: All alpha characters in normalizedSecret must be in guessedLetters
+    // Verificar victoria ignorando espacios
     const isWin = normalizedSecret.split('').every(char => {
-        if (!"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(char)) return true; // Ignore spaces/symbols
+        if (!"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(char)) return true; 
         return guessedLetters.has(char);
     });
 
@@ -62,15 +60,16 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
       }
   }, [mistakes]);
 
+  // Si la palabra está vacía por error de base de datos
   if (!originalWord) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-200 border-dashed text-center">
-        <div className="bg-white p-4 rounded-full mb-3 shadow-sm text-slate-300">
-            <RefreshCw size={32} />
+      <div className="flex flex-col items-center justify-center p-8 bg-red-50 rounded-[2.5rem] border-4 border-red-200 border-dashed text-center">
+        <div className="bg-white p-4 rounded-full mb-3 shadow-sm text-red-300">
+            <HelpCircle size={32} />
         </div>
-        <p className="text-slate-500 font-bold mb-1">¡Ups! Hubo un problema.</p>
-        <p className="text-xs text-slate-400 max-w-xs mx-auto">
-            La palabra secreta no se guardó correctamente. Dile a tu maestra que edite este juego.
+        <p className="text-red-500 font-bold mb-1">Error de Datos</p>
+        <p className="text-xs text-red-400 max-w-xs mx-auto font-bold">
+            No se encontró la palabra secreta. Por favor, pide a la maestra que borre este juego y lo cree de nuevo.
         </p>
       </div>
     );
@@ -79,57 +78,66 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
   const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".split('');
 
   return (
-    <div className="space-y-8">
-       {/* Hearts */}
-       <div className="flex justify-center gap-2 mb-4 bg-pink-50 p-2 rounded-2xl w-fit mx-auto border border-pink-100">
+    <div className="space-y-8 select-none">
+       {/* Vidas / Corazones */}
+       <div className="flex justify-center gap-2 mb-4 bg-pink-50 p-2 rounded-2xl w-fit mx-auto border-2 border-pink-100">
           {[...Array(maxLives)].map((_, i) => (
              <Heart 
                key={i} 
-               size={28} 
+               size={24} 
                className={`${i < (maxLives - mistakes) ? 'text-pink-500 fill-pink-500 animate-pulse' : 'text-slate-200 fill-slate-200'}`} 
              />
           ))}
        </div>
 
-       {/* Word Display (Improved Dashes) */}
-       <div className="flex flex-wrap justify-center gap-3 min-h-[100px] px-2">
+       {/* ÁREA DE JUEGO (PALABRA) */}
+       <div className="flex flex-wrap justify-center items-end gap-3 min-h-[80px] px-2 py-4">
           {originalWord.split('').map((originalChar, index) => {
              const normChar = normalizeChar(originalChar);
              const isSpace = originalChar === ' ';
-             const isSymbol = !"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(normChar);
+             // Mostrar si ya se adivinó o si es un símbolo raro
              const isGuessed = guessedLetters.has(normChar);
-             
-             // Show if guessed, space, or special symbol
-             const isVisible = isGuessed || isSpace || isSymbol;
+             const isVisible = isGuessed || isSpace;
 
              if (isSpace) {
-                 return <div key={index} className="w-6"></div>;
+                 // Espacio entre palabras
+                 return <div key={index} className="w-8 h-16 flex items-center justify-center"></div>;
              }
 
              return (
-               <div key={index} className="flex flex-col items-center justify-end w-10 h-16 relative">
-                   {/* Letter */}
-                   <span className={`font-black text-3xl text-slate-800 mb-1 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
-                        {originalChar}
-                   </span>
-                   {/* Dash/Line */}
-                   <div className="w-full h-1.5 bg-slate-800 rounded-full opacity-80"></div>
+               <div key={index} className="flex flex-col items-center gap-1">
+                   {/* Contenedor de la Letra y la Rayita */}
+                   <div className="w-10 sm:w-12 h-16 flex flex-col justify-end items-center">
+                       {/* La Letra */}
+                       <span className={`font-black text-3xl sm:text-4xl text-slate-800 mb-1 transition-all duration-300 transform ${isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-50'}`}>
+                            {originalChar}
+                       </span>
+                       
+                       {/* LA RAYITA (Línea inferior gruesa) */}
+                       <div className="w-full h-1.5 bg-slate-800 rounded-full"></div>
+                   </div>
                </div>
              )
           })}
        </div>
 
-       {/* Keyboard (Larger Keys) */}
-       <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto pt-4">
+       {/* TECLADO */}
+       <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center max-w-lg mx-auto pt-4 pb-2">
           {alphabet.map(letter => {
              const isGuessed = guessedLetters.has(letter);
              const isCorrect = normalizedSecret.includes(letter);
              
-             let btnClass = "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm";
+             let btnClass = "bg-white border-b-[5px] border-slate-200 text-slate-500 hover:bg-slate-50";
+             
              if (isGuessed) {
-                btnClass = isCorrect 
-                    ? "bg-emerald-500 border-emerald-700 text-white shadow-emerald-200 opacity-50" 
-                    : "bg-slate-200 border-slate-300 text-slate-400 opacity-50";
+                if (isCorrect) {
+                    btnClass = "bg-emerald-500 border-b-[0px] border-emerald-700 text-white opacity-50 translate-y-[5px] shadow-none";
+                } else {
+                    btnClass = "bg-slate-200 border-b-[0px] border-slate-300 text-slate-300 opacity-50 translate-y-[5px] shadow-none";
+                }
+             } else {
+                 // Estado normal (no pulsado)
+                 btnClass += " active:border-b-0 active:translate-y-[5px] transition-all shadow-sm";
              }
 
              return (
@@ -137,7 +145,7 @@ export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: (
                  key={letter}
                  onClick={() => handleGuess(letter)}
                  disabled={isGuessed || mistakes >= maxLives}
-                 className={`w-12 h-16 rounded-2xl font-black text-xl border-b-[6px] active:border-b-0 active:translate-y-1 transition-all ${btnClass}`}
+                 className={`w-9 h-12 sm:w-11 sm:h-14 rounded-xl font-black text-lg sm:text-xl flex items-center justify-center ${btnClass}`}
                >
                  {letter}
                </button>

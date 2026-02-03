@@ -319,8 +319,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
             setIsCreatingQuiz(false);
             return;
         }
-        // FIX: Store answer in OPTIONS[0] to avoid missing column error in DB
-        newQuiz.options = [secretWord.toUpperCase().trim()];
+        // FIX: Store answer in OPTIONS[0] to avoid missing column error in DB.
+        // This makes sure data is saved even without the 'answer' column.
+        const cleanWord = secretWord.toUpperCase().trim();
+        newQuiz.options = [cleanWord];
     }
     else if (quizType === 'SORTING') { 
         newQuiz.gameItems = sortItems.filter(i => i.text.trim()).map((item, i) => ({ id: `${i}`, text: item.text, category: item.cat })); 
