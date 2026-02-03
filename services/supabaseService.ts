@@ -549,6 +549,28 @@ export const supabaseService = {
       }));
   },
 
+  // NEW: Get all expenses for report
+  getAllClassExpenses: async (): Promise<ExpenseRequest[]> => {
+    const { data } = await supabase
+      .from('expense_requests')
+      .select('*, profiles(display_name, avatar_url)')
+      .order('created_at', { ascending: false })
+      .limit(50); // Limit to last 50 for performance
+
+    return (data || []).map((r: any) => ({
+        id: r.id,
+        studentId: r.student_id,
+        amount: r.amount,
+        description: r.description,
+        status: r.status,
+        category: r.category,
+        sentiment: r.sentiment,
+        createdAt: r.created_at,
+        studentName: r.profiles?.display_name || 'Desconocido',
+        studentAvatar: r.profiles?.avatar_url || ''
+    }));
+  },
+
   updateExpenseSentiment: async (requestId: string, sentiment: 'HAPPY' | 'NEUTRAL' | 'SAD') => {
       await supabase.from('expense_requests').update({ sentiment }).eq('id', requestId);
   },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { User, StudentReport, QuizType, QuizResult, Quiz } from '../types';
+import { User, StudentReport, QuizType, QuizResult, Quiz, ExpenseRequest } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
 import { 
@@ -10,7 +10,8 @@ import {
   PartyPopper, Lightbulb, ArrowRight, ArrowLeft, Star, ShoppingBag, 
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, 
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
-  Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert
+  Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert, TrendingDown,
+  Heart, SmilePlus, Meh, Frown
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 
@@ -30,6 +31,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   // Student Detail View State
   const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentWeekId());
+  const [studentExpenses, setStudentExpenses] = useState<ExpenseRequest[]>([]); // GASTOS ALUMNO
+
+  // Reports View State
+  const [classExpenses, setClassExpenses] = useState<ExpenseRequest[]>([]); // GASTOS CLASE
 
   // Arcade Management State
   const [teacherQuizzes, setTeacherQuizzes] = useState<Quiz[]>([]);
@@ -82,6 +87,9 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     if (activeTab === 'ARCADE') {
         loadArcadeData();
     }
+    if (activeTab === 'REPORTS') {
+        loadClassExpenses();
+    }
     
     // Suscripciones en tiempo real
     const subscription = supabaseService.subscribeToChanges('profiles', undefined, () => {
@@ -97,11 +105,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         // Recarga automática al detectar cambios en quizzes (creación o borrado por otro usuario)
         if (activeTab === 'ARCADE') loadArcadeData();
     });
+    
+    const expensesSub = supabaseService.subscribeToChanges('expense_requests', undefined, () => {
+        if (activeTab === 'REPORTS') loadClassExpenses();
+        if (selectedStudent) loadStudentDetails(selectedStudent);
+    });
 
     return () => {
         subscription.unsubscribe();
         quizResultSub.unsubscribe();
         quizzesSub.unsubscribe();
+        expensesSub.unsubscribe();
     };
   }, [activeTab]);
 
@@ -132,6 +146,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       }
   };
 
+  const loadClassExpenses = async () => {
+      const ex = await supabaseService.getAllClassExpenses();
+      setClassExpenses(ex);
+  };
+
   const loadStudentDetails = async (uid: string) => {
       const weeks = await supabaseService.getStudentWeeks(uid);
       setAvailableWeeks(weeks);
@@ -140,6 +159,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       } else {
          setSelectedWeek(getCurrentWeekId());
       }
+      const exp = await supabaseService.getExpenseRequests(uid);
+      setStudentExpenses(exp);
   };
 
   useEffect(() => {
@@ -514,6 +535,52 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                       <TaskController studentId={activeStudentData.uid} allowedType="HOME" readOnly={true} weekId={selectedWeek} />
                   </div>
                 </div>
+                
+                {/* HISTORIAL DE GASTOS DEL ALUMNO */}
+                <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-3 mb-6">
+                       <div className="p-3 bg-rose-100 text-rose-600 rounded-xl"><ShoppingBag size={24} /></div>
+                       <h3 className="font-black text-slate-700 text-lg">Historial de Gastos</h3>
+                   </div>
+                   {studentExpenses.length === 0 ? (
+                       <p className="text-center text-slate-400 text-sm font-bold py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                           Sin gastos registrados.
+                       </p>
+                   ) : (
+                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                           {studentExpenses.map(exp => (
+                               <div key={exp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                   <div>
+                                       <p className="font-black text-slate-700 text-sm">{exp.description}</p>
+                                       <div className="flex items-center gap-2 mt-1">
+                                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase
+                                               ${exp.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-600' : ''}
+                                               ${exp.status === 'REJECTED' ? 'bg-rose-100 text-rose-600' : ''}
+                                               ${exp.status === 'PENDING' ? 'bg-amber-100 text-amber-600' : ''}
+                                           `}>
+                                               {exp.status === 'APPROVED' ? 'Aprobado' : exp.status === 'REJECTED' ? 'Rechazado' : 'Pendiente'}
+                                           </span>
+                                           {exp.category === 'NEED' && <span className="text-[10px] font-bold text-emerald-500 bg-white px-1.5 py-0.5 rounded border border-emerald-100 flex items-center gap-1"><Heart size={10}/> Necesidad</span>}
+                                           {exp.category === 'WANT' && <span className="text-[10px] font-bold text-pink-500 bg-white px-1.5 py-0.5 rounded border border-pink-100 flex items-center gap-1"><Star size={10}/> Capricho</span>}
+                                       </div>
+                                   </div>
+                                   <div className="text-right">
+                                       <div className="font-black text-rose-500 text-sm flex items-center justify-end gap-1">
+                                           <TrendingDown size={14}/> -{exp.amount}
+                                       </div>
+                                       {exp.sentiment && (
+                                            <div className="mt-1 flex justify-end">
+                                                {exp.sentiment === 'HAPPY' && <SmilePlus size={16} className="text-emerald-500"/>}
+                                                {exp.sentiment === 'NEUTRAL' && <Meh size={16} className="text-amber-500"/>}
+                                                {exp.sentiment === 'SAD' && <Frown size={16} className="text-rose-500"/>}
+                                            </div>
+                                       )}
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+                </div>
               </div>
             ) : (
               <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-100 rounded-[3rem] bg-slate-50/50">
@@ -737,6 +804,53 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                              ))}
                          </tbody>
                      </table>
+                 </div>
+             </div>
+             
+             {/* PANEL ECONOMÍA DE CLASE */}
+             <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100">
+                 <div className="flex flex-col md:flex-row gap-8">
+                     <div className="md:w-1/3">
+                         <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                             <ShoppingBag className="text-rose-500" /> Economía de Clase
+                         </h2>
+                         <p className="text-slate-400 font-bold text-sm mb-6">Gastos aprobados recientes</p>
+                         
+                         <div className="bg-rose-50 rounded-2xl p-6 border-2 border-rose-100 text-center">
+                             <p className="text-rose-400 text-xs font-black uppercase tracking-widest mb-1">Total Gastado (Histórico)</p>
+                             <div className="text-3xl font-black text-rose-600 flex items-center justify-center gap-1">
+                                 {classExpenses.filter(e => e.status === 'APPROVED').reduce((sum, e) => sum + e.amount, 0)} <span className="text-base">MB</span>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <div className="flex-1">
+                         <h3 className="font-black text-slate-600 text-sm mb-4">Últimas Compras Aprobadas</h3>
+                         {classExpenses.filter(e => e.status === 'APPROVED').length === 0 ? (
+                             <p className="text-slate-400 text-sm font-bold text-center py-6 border-2 border-dashed border-slate-100 rounded-xl">No hay gastos aprobados aún.</p>
+                         ) : (
+                             <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                 {classExpenses.filter(e => e.status === 'APPROVED').slice(0, 10).map((expense) => (
+                                     <div key={expense.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                         <div className="flex items-center gap-3">
+                                             <img src={expense.studentAvatar} className="w-8 h-8 rounded-lg bg-white border border-slate-200" />
+                                             <div>
+                                                 <p className="font-black text-slate-700 text-xs">{expense.description}</p>
+                                                 <p className="text-[10px] text-slate-400 font-bold">{expense.studentName}</p>
+                                             </div>
+                                         </div>
+                                         <div className="text-right">
+                                             <span className="font-black text-rose-500 text-xs">- {expense.amount} MB</span>
+                                             <div className="flex justify-end mt-1">
+                                                 {expense.category === 'NEED' && <Heart size={10} className="text-emerald-400 fill-emerald-400"/>}
+                                                 {expense.category === 'WANT' && <Star size={10} className="text-pink-400 fill-pink-400"/>}
+                                             </div>
+                                         </div>
+                                     </div>
+                                 ))}
+                             </div>
+                         )}
+                     </div>
                  </div>
              </div>
          </div>
