@@ -24,6 +24,17 @@ const mapProfileToUser = (profile: any): User => ({
   linkedStudentIds: profile.linked_student_ids || [],
 });
 
+const TASK_NAMES: Record<string, string> = {
+  'ATTENDANCE': 'Asistencia',
+  'RESPONSIBILITY': 'Responsabilidad',
+  'BEHAVIOR': 'Comportamiento',
+  'RESPECT': 'Respeto',
+  'PARTICIPATION': 'Participación',
+  'CHORES': 'Quehaceres',
+  'HYGIENE': 'Higiene',
+  'READING': 'Lectura'
+};
+
 export const supabaseService = {
   
   // REALTIME SUBSCRIPTION HELPER
@@ -344,13 +355,16 @@ export const supabaseService = {
        const reward = type === 'SCHOOL' ? 20 : 25;
        const change = value ? reward : -reward;
        
+       // TRANSLATE KEY
+       const label = TASK_NAMES[key] || key;
+
        const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
        if (student) {
           await supabase.from('profiles').update({ balance: student.balance + change }).eq('id', studentId);
           await supabase.from('transactions').insert({ 
               student_id: studentId, 
               amount: change, 
-              description: value ? `Tarea: ${key}` : `Revocada: ${key}`, 
+              description: value ? `Tarea: ${label}` : `Revocada: ${label}`, 
               type: change > 0 ? 'EARN' : 'SPEND', 
               timestamp: Date.now() 
           });

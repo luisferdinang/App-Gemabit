@@ -144,6 +144,18 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       return { icon: <Sparkles size={18}/>, bg: 'bg-amber-100', text: 'text-amber-600', label: 'Premio' };
   };
 
+  const translateDescription = (text: string) => {
+    return text
+      .replace('ATTENDANCE', 'Asistencia')
+      .replace('RESPONSIBILITY', 'Responsabilidad')
+      .replace('BEHAVIOR', 'Comportamiento')
+      .replace('RESPECT', 'Respeto')
+      .replace('PARTICIPATION', 'Participación')
+      .replace('CHORES', 'Quehaceres')
+      .replace('HYGIENE', 'Higiene')
+      .replace('READING', 'Lectura');
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -365,7 +377,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                                {visuals.icon}
                                            </div>
                                            <div>
-                                               <p className="font-black text-slate-700 text-xs line-clamp-1">{t.description}</p>
+                                               <p className="font-black text-slate-700 text-xs line-clamp-1">{translateDescription(t.description)}</p>
                                                <div className="flex items-center gap-2 mt-0.5">
                                                    <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
                                                        <Calendar size={10}/> {date}
