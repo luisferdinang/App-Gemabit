@@ -31,6 +31,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
   const student = liveUser || initialStudent;
 
   const [tasks, setTasks] = useState<TaskLog[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false); // Estado para animación de carga manual
   
   // Quiz Arcade State
   const [showArcade, setShowArcade] = useState(false);
@@ -79,25 +80,36 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
   const [isExchangingSGB, setIsExchangingSGB] = useState(false);
 
   useEffect(() => {
-    loadTasks();
-    loadWeeksHistory();
+    loadAllData();
     
     // Realtime Subscriptions for DATA (Profile handled in App.tsx via Zustand)
+    // IMPORTANT: Listening to ANY change in 'tasks' for this student to trigger immediate update
     const tasksSub = supabaseService.subscribeToChanges('tasks', `student_id=eq.${student.uid}`, () => {
+        console.log("🔔 Cambio detectado en Tareas - Recargando...");
         loadTasks();
         loadWeeksHistory();
+        refreshUser(); // Forzar actualización de saldo en Zustand
+        soundService.playPop(); // Sonido sutil para indicar actualización
     });
+    
     const quizSub = supabaseService.subscribeToChanges('quiz_results', `student_id=eq.${student.uid}`, () => {
         loadQuizData();
+        refreshUser();
     });
+    
     const expensesSub = supabaseService.subscribeToChanges('expense_requests', `student_id=eq.${student.uid}`, () => {
         loadExpenses();
+        refreshUser();
     });
+    
     const goalsSub = supabaseService.subscribeToChanges('savings_goals', `student_id=eq.${student.uid}`, () => {
         loadGoals();
+        refreshUser();
     });
+    
     const transSub = supabaseService.subscribeToChanges('transactions', `student_id=eq.${student.uid}`, () => {
         loadFinanceData();
+        refreshUser();
     });
 
     return () => {
@@ -113,6 +125,26 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
   useEffect(() => {
       loadTasks();
   }, [selectedTaskWeek]);
+
+  const loadAllData = async () => {
+      await Promise.all([
+          loadTasks(),
+          loadWeeksHistory(),
+          loadQuizData(),
+          loadExpenses(),
+          loadGoals(),
+          loadFinanceData()
+      ]);
+  };
+
+  const handleManualRefresh = async () => {
+      if (isRefreshing) return;
+      setIsRefreshing(true);
+      soundService.playPop();
+      refreshUser(); // Update global user state (balance, xp)
+      await loadAllData();
+      setTimeout(() => setIsRefreshing(false), 800);
+  };
 
   const loadTasks = async () => {
     const data = await supabaseService.getTasks(student.uid, selectedTaskWeek);
@@ -223,18 +255,31 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
   return (
     <div className="space-y-8 animate-fade-in">
       
-      <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border-b-4 border-slate-200 shadow-sm relative overflow-hidden">
-         <div className="relative group">
-            <div className="w-20 h-20 rounded-2xl bg-violet-50 border-4 border-violet-200 overflow-hidden shrink-0 relative z-10 animate-float cursor-pointer" onClick={() => setShowAvatarModal(true)}>
-                <img src={student.avatar} alt="Mi Avatar" className="w-full h-full object-cover" loading="eager" />
-            </div>
-            <button onClick={() => setShowAvatarModal(true)} className="absolute -bottom-2 -right-2 bg-white text-slate-500 p-1.5 rounded-full border-2 border-slate-200 shadow-sm z-20 hover:scale-110 transition-transform"> <Pencil size={14} /> </button>
+      <div className="flex items-center justify-between gap-4 bg-white p-4 rounded-3xl border-b-4 border-slate-200 shadow-sm relative overflow-hidden">
+         <div className="flex items-center gap-4 relative z-10">
+             <div className="relative group">
+                <div className="w-20 h-20 rounded-2xl bg-violet-50 border-4 border-violet-200 overflow-hidden shrink-0 relative z-10 animate-float cursor-pointer" onClick={() => setShowAvatarModal(true)}>
+                    <img src={student.avatar} alt="Mi Avatar" className="w-full h-full object-cover" loading="eager" />
+                </div>
+                <button onClick={() => setShowAvatarModal(true)} className="absolute -bottom-2 -right-2 bg-white text-slate-500 p-1.5 rounded-full border-2 border-slate-200 shadow-sm z-20 hover:scale-110 transition-transform"> <Pencil size={14} /> </button>
+             </div>
+             <div>
+                <h2 className="text-2xl font-black text-slate-700 leading-none mb-1">¡Hola, {student.displayName.split(' ')[0]}!</h2>
+                <p className="text-slate-400 font-bold text-sm">Vamos a llenar la barra.</p>
+             </div>
          </div>
-         <div className="relative z-10">
-            <h2 className="text-2xl font-black text-slate-700">¡Hola, {student.displayName.split(' ')[0]}!</h2>
-            <p className="text-slate-400 font-bold text-sm">¡Vamos a llenar la barra de energía!</p>
-         </div>
-         <div className="absolute right-0 top-0 w-32 h-32 bg-yellow-100 rounded-full blur-2xl opacity-60 translate-x-10 -translate-y-10"></div>
+
+         {/* BOTÓN DE ACTUALIZAR MANUAL */}
+         <button 
+            onClick={handleManualRefresh} 
+            disabled={isRefreshing}
+            className="relative z-20 bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 p-3 rounded-2xl border-2 border-slate-200 hover:border-violet-200 transition-all active:scale-95"
+            title="Sincronizar Datos"
+         >
+            <RefreshCw size={24} className={isRefreshing ? 'animate-spin text-violet-500' : ''} strokeWidth={3} />
+         </button>
+
+         <div className="absolute right-0 top-0 w-32 h-32 bg-yellow-100 rounded-full blur-2xl opacity-60 translate-x-10 -translate-y-10 pointer-events-none"></div>
       </div>
 
       {student.linkCode && ( <div className="bg-gradient-to-r from-orange-400 to-amber-500 rounded-3xl p-5 text-white shadow-lg flex items-center justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform"> <div className="relative z-10"> <p className="font-bold text-orange-100 text-xs uppercase tracking-wider mb-1">Código de Vinculación</p> <div className="bg-white/20 px-4 py-2 rounded-xl inline-block backdrop-blur-sm border-2 border-white/30"> <p className="font-black text-3xl tracking-widest font-mono shadow-sm">{student.linkCode}</p> </div> <p className="text-xs font-bold text-orange-50 mt-2">Dáselo a tus papás</p> </div> <QrCode size={60} className="text-white/30 rotate-12 group-hover:rotate-0 transition-transform duration-500" /> <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div> </div> )}
