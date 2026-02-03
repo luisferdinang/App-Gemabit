@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ExpenseRequest } from '../types';
 import { supabaseService } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Clock, Calendar } from 'lucide-react';
 
 interface ParentViewProps {
   currentUser: User;
@@ -16,37 +16,69 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   
   // Expenses State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
+  const [childHistoryExpenses, setChildHistoryExpenses] = useState<ExpenseRequest[]>([]);
 
+  // 1. Carga inicial y suscripción a cambios del PADRE (Vinculación) y BALANCE hijos
   useEffect(() => {
-    loadData();
+    loadParentData();
     
-    // Subscribe to changes in profiles (balance)
-    const subProfiles = supabaseService.subscribeToChanges('profiles', undefined, () => {
-        loadData();
+    // Escuchar cambios en el perfil del PADRE (ej. cuando se vincula un hijo nuevo)
+    const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => {
+        console.log("Perfil padre actualizado, recargando...");
+        loadParentData();
     });
-    // Subscribe to new expense requests
+
+    // Escuchar cambios en los perfiles de los HIJOS (ej. cambio de balance/puntos)
+    // Nota: Escuchamos todos los perfiles para simplificar, ya que no sabemos los IDs al montar el componente
+    const subProfiles = supabaseService.subscribeToChanges('profiles', undefined, () => {
+        loadParentData();
+    });
+
+    // Escuchar nuevas solicitudes de gastos (PENDING)
     const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => {
-        loadData();
+        loadParentData();
+        if (selectedChild) loadChildHistory(selectedChild);
     });
 
     return () => {
+        subParent.unsubscribe();
         subProfiles.unsubscribe();
         subExpenses.unsubscribe();
     };
-  }, [currentUser]);
+  }, [currentUser.uid]);
 
-  const loadData = async () => {
-    if (currentUser.linkedStudentIds && currentUser.linkedStudentIds.length > 0) {
-      const allStudents = await supabaseService.getStudents();
-      const myKids = allStudents.filter(s => currentUser.linkedStudentIds?.includes(s.uid));
+  // 2. Efecto para cargar historial cuando cambia el niño seleccionado
+  useEffect(() => {
+      if (selectedChild) {
+          loadChildHistory(selectedChild);
+      } else {
+          setChildHistoryExpenses([]);
+      }
+  }, [selectedChild]);
+
+  const loadParentData = async () => {
+    // Recargar el perfil del padre para asegurar que tenemos los linkedStudentIds actualizados
+    const updatedParent = await supabaseService.getStudentById(currentUser.uid); 
+    const linkedIds = updatedParent?.linkedStudentIds || currentUser.linkedStudentIds || [];
+
+    if (linkedIds.length > 0) {
+      const allStudents = await supabaseService.getStudents(); // Podría optimizarse, pero sirve para filtrar
+      const myKids = allStudents.filter(s => linkedIds.includes(s.uid));
       setChildren(myKids);
-      if (myKids.length > 0 && !selectedChild) {
+      
+      // Si no hay seleccionado o el seleccionado ya no está en la lista, seleccionar el primero
+      if (myKids.length > 0 && (!selectedChild || !myKids.find(k => k.uid === selectedChild))) {
         setSelectedChild(myKids[0].uid);
       }
       
       const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
       setPendingExpenses(expenses);
     }
+  };
+
+  const loadChildHistory = async (childId: string) => {
+      const history = await supabaseService.getExpenseRequests(childId);
+      setChildHistoryExpenses(history);
   };
 
   const handleLink = async (e: React.FormEvent) => {
@@ -56,7 +88,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       alert("¡Vinculación exitosa!");
       setIsLinking(false);
       setLinkCode('');
-      loadData(); 
+      // No necesitamos llamar a loadParentData() manualmente aquí porque la suscripción 'subParent' lo detectará
     } catch (err) {
       alert("Código incorrecto o error al vincular");
     }
@@ -64,21 +96,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   
   // Callback for immediate update when Parent marks a task
   const handleChildUpdate = () => {
-      loadData();
+      loadParentData(); // Refresh balances
   };
 
   const handleApproveExpense = async (id: string) => {
       const result = await supabaseService.approveExpense(id);
       if (result && !result.success) {
           alert("Error: " + result.error);
-      } else {
-          loadData();
       }
+      // La suscripción recargará los datos
   };
 
   const handleRejectExpense = async (id: string) => {
       await supabaseService.rejectExpense(id);
-      loadData();
+      // La suscripción recargará los datos
   };
 
   const activeKid = children.find(c => c.uid === selectedChild);
@@ -119,25 +150,27 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       {pendingExpenses.length > 0 && (
           <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-pulse-slow">
               <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2">
-                  <AlertTriangle className="text-rose-500" /> Solicitudes de Gasto
+                  <AlertTriangle className="text-rose-500" /> Solicitudes de Gasto Pendientes
               </h3>
               <div className="grid gap-4 md:grid-cols-2">
                   {pendingExpenses.map(req => (
                       <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border border-rose-100">
                           <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border-2 border-rose-50">
                                   <img src={req.studentAvatar} className="w-full h-full object-cover"/>
                               </div>
                               <div>
                                   <p className="font-black text-slate-800 text-sm">{req.studentName}</p>
-                                  <p className="text-slate-500 text-xs font-bold">Quiere gastar en: <span className="text-slate-700">{req.description}</span></p>
+                                  <p className="text-slate-500 text-xs font-bold">Desea: <span className="text-slate-700">{req.description}</span></p>
+                                  {req.category === 'NEED' && <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full mt-1 inline-block">NECESIDAD</span>}
+                                  {req.category === 'WANT' && <span className="text-[9px] font-black bg-pink-100 text-pink-600 px-2 py-0.5 rounded-full mt-1 inline-block">CAPRICHO</span>}
                               </div>
                           </div>
                           <div className="flex items-center gap-3">
                               <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
                               <div className="flex flex-col gap-1">
-                                  <button onClick={() => handleApproveExpense(req.id)} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"><Check size={16}/></button>
-                                  <button onClick={() => handleRejectExpense(req.id)} className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300"><X size={16}/></button>
+                                  <button onClick={() => handleApproveExpense(req.id)} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-sm"><Check size={16}/></button>
+                                  <button onClick={() => handleRejectExpense(req.id)} className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300 shadow-sm"><X size={16}/></button>
                               </div>
                           </div>
                       </div>
@@ -251,6 +284,54 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                   </div>
 
                </div>
+
+               {/* EXPENSE HISTORY SECTION */}
+               <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-3 mb-6">
+                       <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
+                           <History size={24} strokeWidth={3} />
+                       </div>
+                       <div>
+                           <h3 className="font-black text-slate-700 text-lg">Historial de Gastos</h3>
+                           <p className="text-xs text-slate-400 font-bold">Solicitudes pasadas de {activeKid.displayName.split(' ')[0]}</p>
+                       </div>
+                   </div>
+
+                   {childHistoryExpenses.length === 0 ? (
+                       <p className="text-center text-slate-400 font-bold text-xs py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                           No hay historial de gastos.
+                       </p>
+                   ) : (
+                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                           {childHistoryExpenses.map((exp) => {
+                               const date = new Date(exp.createdAt).toLocaleDateString();
+                               return (
+                                   <div key={exp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                       <div>
+                                           <p className="font-black text-slate-700 text-xs">{exp.description}</p>
+                                           <div className="flex items-center gap-2 mt-1">
+                                               <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                                                   <Calendar size={10}/> {date}
+                                               </span>
+                                               <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase
+                                                   ${exp.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-600' : ''}
+                                                   ${exp.status === 'REJECTED' ? 'bg-rose-100 text-rose-600' : ''}
+                                                   ${exp.status === 'PENDING' ? 'bg-amber-100 text-amber-600' : ''}
+                                               `}>
+                                                   {exp.status === 'APPROVED' ? 'Aprobado' : exp.status === 'REJECTED' ? 'Rechazado' : 'Pendiente'}
+                                               </span>
+                                           </div>
+                                       </div>
+                                       <div className="font-black text-rose-500 text-sm flex items-center gap-1">
+                                           <TrendingDown size={14}/> -{exp.amount}
+                                       </div>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                   )}
+               </div>
+
              </div>
            ) : (
              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-[3rem] bg-slate-50/50">
