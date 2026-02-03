@@ -1038,7 +1038,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
                                     ? 'bg-white/20 rotate-0 scale-110 shadow-inner' 
                                     : 'bg-slate-100 grayscale opacity-50 group-hover:scale-110'
                                   }
-                               `}>
+                                `}>
                                   {visual.icon}
                                </div>
 
@@ -1129,6 +1129,86 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
         )}
       </div>
 
+      {/* FINANCE MODAL (MI TESORO) */}
+      {showFinanceModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
+             <div className="bg-amber-500 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-amber-300 relative overflow-hidden flex flex-col max-h-[90vh]">
+                 <div className="bg-amber-600 p-6 text-center relative border-b-4 border-amber-800">
+                     <button onClick={() => setShowFinanceModal(false)} className="absolute top-4 right-4 p-2 bg-amber-700 rounded-full text-amber-200 hover:text-white transition-colors">
+                        <X size={20} />
+                     </button>
+                     <div className="inline-block p-3 bg-amber-800/30 rounded-2xl backdrop-blur-sm border-2 border-amber-400/30 mb-2">
+                        <TrendingUp size={32} className="text-white"/>
+                     </div>
+                     <h3 className="text-xl font-black text-white">Mi Tesoro</h3>
+                     <p className="text-amber-100 text-xs font-bold mt-1">Tu historia financiera</p>
+                 </div>
+
+                 <div className="p-6 overflow-y-auto bg-amber-50 flex-1">
+                     
+                     <div className="flex justify-center mb-6">
+                         <div className="bg-amber-100 p-1 rounded-xl flex gap-1">
+                             {['DAY', 'WEEK', 'MONTH', 'ALL'].map(t => (
+                                 <button
+                                    key={t}
+                                    onClick={() => setFinanceTimeframe(t as any)}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${financeTimeframe === t ? 'bg-amber-500 text-white shadow-sm' : 'text-amber-600 hover:bg-amber-200'}`}
+                                 >
+                                     {t === 'DAY' ? 'Día' : t === 'WEEK' ? 'Semana' : t === 'MONTH' ? 'Mes' : 'Todo'}
+                                 </button>
+                             ))}
+                         </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4 mb-6">
+                         <div className="bg-emerald-100 p-4 rounded-2xl border-2 border-emerald-200 text-center">
+                             <div className="flex items-center justify-center gap-1 text-emerald-600 mb-1">
+                                 <ArrowUpCircle size={16}/> <span className="text-[10px] font-black uppercase">Ganado</span>
+                             </div>
+                             <span className="text-xl font-black text-emerald-700">+{totalEarned}</span>
+                         </div>
+                         <div className="bg-rose-100 p-4 rounded-2xl border-2 border-rose-200 text-center">
+                             <div className="flex items-center justify-center gap-1 text-rose-600 mb-1">
+                                 <ArrowDownCircle size={16}/> <span className="text-[10px] font-black uppercase">Gastado</span>
+                             </div>
+                             <span className="text-xl font-black text-rose-700">-{totalSpent}</span>
+                         </div>
+                     </div>
+
+                     <h4 className="font-black text-slate-400 text-xs uppercase tracking-widest mb-3 pl-2">Movimientos</h4>
+                     
+                     {filteredTransactions.length === 0 ? (
+                         <div className="text-center py-8 text-slate-400 font-bold text-xs border-2 border-dashed border-amber-200 rounded-2xl">
+                             No hay movimientos en este periodo.
+                         </div>
+                     ) : (
+                         <div className="space-y-3">
+                             {filteredTransactions.map(t => {
+                                 const isEarn = t.type === 'EARN';
+                                 return (
+                                     <div key={t.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                                         <div className="flex items-center gap-3">
+                                             <div className={`p-2 rounded-xl ${isEarn ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                                 {isEarn ? <Plus size={16}/> : <ShoppingBag size={16}/>}
+                                             </div>
+                                             <div>
+                                                 <p className="font-bold text-slate-700 text-xs">{t.description}</p>
+                                                 <p className="text-[10px] font-bold text-slate-400">{new Date(t.timestamp).toLocaleDateString()}</p>
+                                             </div>
+                                         </div>
+                                         <span className={`font-black text-sm ${isEarn ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                             {isEarn ? '+' : ''}{t.amount}
+                                         </span>
+                                     </div>
+                                 );
+                             })}
+                         </div>
+                     )}
+                 </div>
+             </div>
+        </div>
+      )}
+
       {/* MODAL HISTORIAL DE MISIONES */}
       {showHistoryModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
@@ -1202,7 +1282,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
              </div>
 
              <div className="mb-8">
-                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-6 border-4 border-amber-300 shadow-xl relative overflow-hidden flex justify-between items-center">
+                 <div className="bg-gradient-to-r from-amber-400 to-orange-500 rounded-3xl p-6 border-4 border-amber-300 shadow-xl relative overflow-hidden flex flex-between items-center">
                      <div className="relative z-10">
                         <p className="text-amber-100 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-2">
                            <Wallet size={16}/> Bolsa Actual

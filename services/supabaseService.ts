@@ -681,6 +681,15 @@ export const supabaseService = {
       // Increase Goal
       await supabase.from('savings_goals').update({ current_amount: goal.current_amount + amount }).eq('id', goalId);
       
+      // LOG TRANSACTION (SPEND from Wallet)
+      await supabase.from('transactions').insert({ 
+          student_id: goal.student_id, 
+          amount: -amount, 
+          description: `Ahorro: ${goal.title}`, 
+          type: 'SPEND', 
+          timestamp: Date.now() 
+      });
+
       return { success: true };
   },
 
@@ -699,6 +708,15 @@ export const supabaseService = {
       await supabase.from('profiles').update({ balance: student.balance + amount }).eq('id', goal.student_id);
       // Decrease Goal
       await supabase.from('savings_goals').update({ current_amount: goal.current_amount - amount }).eq('id', goalId);
+
+      // LOG TRANSACTION (EARN back to Wallet)
+      await supabase.from('transactions').insert({ 
+          student_id: goal.student_id, 
+          amount: amount, 
+          description: `Retiro: ${goal.title}`, 
+          type: 'EARN', 
+          timestamp: Date.now() 
+      });
 
       return { success: true };
   },
