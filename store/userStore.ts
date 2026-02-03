@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { User } from '../types';
 
-interface UserState {
+export interface UserState {
   currentUser: User | null;
   setUser: (user: User | null) => void;
   updateUserFields: (fields: Partial<User>) => void;
@@ -10,7 +10,7 @@ interface UserState {
 export const useUserStore = create<UserState>((set) => ({
   currentUser: null,
   setUser: (user) => set({ currentUser: user }),
-  updateUserFields: (fields) => set((state) => ({
+  updateUserFields: (fields) => set((state: UserState) => ({
     currentUser: state.currentUser ? { ...state.currentUser, ...fields } : null
   })),
 }));

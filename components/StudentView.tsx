@@ -17,7 +17,7 @@ import { SentenceGame } from './games/SentenceGame';
 import { SortingGame } from './games/SortingGame';
 import { SecretWordGame } from './games/SecretWordGame';
 import { IntruderGame } from './games/IntruderGame';
-import { useUserStore } from '../store/userStore';
+import { useUserStore, UserState } from '../store/userStore';
 
 interface StudentViewProps {
   student: User; // Keeps receiving prop for initial load but uses store for updates
@@ -26,7 +26,7 @@ interface StudentViewProps {
 
 export const StudentView: React.FC<StudentViewProps> = ({ student: initialStudent, refreshUser }) => {
   // USE ZUSTAND STORE TO GET LIVE UPDATES
-  const liveUser = useUserStore((state) => state.currentUser);
+  const liveUser = useUserStore((state: UserState) => state.currentUser);
   // Fallback to prop if store is empty (rare)
   const student = liveUser || initialStudent;
 
