@@ -73,12 +73,23 @@ const SortingGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: ()
   return ( <div className="space-y-8 py-4"> <div className="flex justify-center"> <div className="w-40 h-40 bg-white rounded-[2rem] shadow-xl border-4 border-slate-100 flex items-center justify-center p-4 text-center animate-bounce-slow relative z-10"> <span className="text-2xl font-black text-slate-700 break-words leading-tight">{currentItem.text}</span> </div> </div> <div className="grid grid-cols-2 gap-6"> <button onClick={() => handleSort('NEED')} className="flex flex-col items-center gap-2 bg-emerald-100 hover:bg-emerald-200 border-4 border-emerald-300 rounded-3xl p-6 transition-colors" > <div className="p-3 bg-emerald-500 text-white rounded-full"><Check size={32}/></div> <span className="font-black text-emerald-800 uppercase tracking-wider">Necesidad</span> </button> <button onClick={() => handleSort('WANT')} className="flex flex-col items-center gap-2 bg-rose-100 hover:bg-rose-200 border-4 border-rose-300 rounded-3xl p-6 transition-colors" > <div className="p-3 bg-rose-500 text-white rounded-full"><Sparkles size={32}/></div> <span className="font-black text-rose-800 uppercase tracking-wider">Capricho</span> </button> </div> </div> );
 };
 
-// 3. Secret Word Game (Corregido y Mejorado)
+// 3. Secret Word Game (Improved Logic & Visuals)
 const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
   const originalWord = quiz.answer?.trim().toUpperCase() || '';
-  // Normalizar la palabra para la lógica (quitar tildes: ÁRBOL -> ARBOL)
+  
+  // Custom normalization: Accents -> Base, but keep Ñ
+  const normalizeChar = (char: string) => {
+      return char
+        .replace(/[ÁÀÄÂ]/g, 'A')
+        .replace(/[ÉÈËÊ]/g, 'E')
+        .replace(/[ÍÌÏÎ]/g, 'I')
+        .replace(/[ÓÒÖÔ]/g, 'O')
+        .replace(/[ÚÙÜÛ]/g, 'U');
+      // Ñ is NOT replaced, so it stays Ñ
+  };
+
   const normalizedSecret = useMemo(() => {
-      return originalWord.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return originalWord.split('').map(normalizeChar).join('');
   }, [originalWord]);
 
   const [guessedLetters, setGuessedLetters] = useState<Set<string>>(new Set());
@@ -92,7 +103,7 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
     newGuessed.add(letter);
     setGuessedLetters(newGuessed);
 
-    // Comprobar contra la versión normalizada
+    // Check against normalized secret (where Ñ is Ñ, but Á is A)
     if (!normalizedSecret.includes(letter)) {
       setMistakes(prev => prev + 1);
       soundService.playPop(); 
@@ -102,8 +113,12 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
   };
 
   useEffect(() => {
-    // Comprobar victoria usando la versión normalizada
-    const isWin = normalizedSecret.split('').every(char => guessedLetters.has(char));
+    // Win Condition: All alpha characters in normalizedSecret must be in guessedLetters
+    const isWin = normalizedSecret.split('').every(char => {
+        if (!"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(char)) return true; // Ignore spaces/symbols
+        return guessedLetters.has(char);
+    });
+
     if (isWin && normalizedSecret.length > 0) {
       setTimeout(onComplete, 1000);
     }
@@ -117,12 +132,9 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
 
   const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".split('');
 
-  // Helper para normalizar carácter individual al renderizar
-  const getNormalizedChar = (char: string) => char.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
   return (
     <div className="space-y-8">
-       {/* Vidas */}
+       {/* Hearts */}
        <div className="flex justify-center gap-2 mb-4 bg-pink-50 p-2 rounded-2xl w-fit mx-auto border border-pink-100">
           {[...Array(maxLives)].map((_, i) => (
              <Heart 
@@ -133,27 +145,32 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
           ))}
        </div>
 
-       {/* Palabra Oculta */}
-       <div className="flex flex-wrap justify-center gap-2 min-h-[80px] p-6 bg-slate-50 rounded-3xl border-2 border-slate-200 shadow-inner">
+       {/* Word Display (Dashes Style) */}
+       <div className="flex flex-wrap justify-center gap-3 min-h-[80px] p-6 bg-slate-50/50 rounded-3xl border border-slate-100">
           {originalWord.split('').map((originalChar, index) => {
-             // Si el caracter normalizado está en las adivinadas, mostramos el original
-             const normChar = getNormalizedChar(originalChar);
-             const isGuessed = guessedLetters.has(normChar);
-             // Si es un espacio, lo mostramos siempre
+             const normChar = normalizeChar(originalChar);
              const isSpace = originalChar === ' ';
+             const isSymbol = !"ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".includes(normChar);
+             const isGuessed = guessedLetters.has(normChar);
              
+             // Show if guessed, space, or special symbol
+             const isVisible = isGuessed || isSpace || isSymbol;
+
              return (
-               <div key={index} className={`w-12 h-16 flex items-center justify-center border-b-4 ${isSpace ? 'border-transparent' : 'border-slate-300'} rounded-lg bg-white shadow-sm`}>
-                  <span className="font-black text-3xl text-slate-800">
-                    {(isGuessed || isSpace) ? originalChar : ''}
-                  </span>
+               <div key={index} className="flex flex-col items-center gap-1">
+                   {/* Container for letter + dash */}
+                   <div className={`w-10 h-14 flex items-end justify-center pb-1 ${isSpace ? '' : 'border-b-4 border-slate-800'}`}>
+                      <span className={`font-black text-3xl text-slate-800 transition-all duration-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                        {originalChar}
+                      </span>
+                   </div>
                </div>
              )
           })}
        </div>
 
-       {/* Teclado */}
-       <div className="flex flex-wrap gap-2 justify-center max-w-sm mx-auto">
+       {/* Keyboard (Larger Keys) */}
+       <div className="flex flex-wrap gap-2 justify-center max-w-lg mx-auto">
           {alphabet.map(letter => {
              const isGuessed = guessedLetters.has(letter);
              const isCorrect = normalizedSecret.includes(letter);
@@ -161,7 +178,7 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
              let btnClass = "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm";
              if (isGuessed) {
                 btnClass = isCorrect 
-                    ? "bg-emerald-500 border-emerald-700 text-white shadow-emerald-200" 
+                    ? "bg-emerald-500 border-emerald-700 text-white shadow-emerald-200 opacity-50" 
                     : "bg-slate-200 border-slate-300 text-slate-400 opacity-50";
              }
 
@@ -170,7 +187,7 @@ const SecretWordGameComponent = ({ quiz, onComplete }: { quiz: Quiz, onComplete:
                  key={letter}
                  onClick={() => handleGuess(letter)}
                  disabled={isGuessed || mistakes >= maxLives}
-                 className={`w-12 h-14 rounded-2xl font-black text-xl border-b-[6px] active:border-b-0 active:translate-y-1 transition-all ${btnClass}`}
+                 className={`w-12 h-16 rounded-2xl font-black text-xl border-b-[6px] active:border-b-0 active:translate-y-1 transition-all ${btnClass}`}
                >
                  {letter}
                </button>
