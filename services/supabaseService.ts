@@ -135,18 +135,25 @@ export const supabaseService = {
   // SYSTEM RESET (FACTORY RESET)
   resetSystemData: async (adminUid: string): Promise<{success: boolean, error?: string}> => {
     try {
+        const zeroUuid = '00000000-0000-0000-0000-000000000000';
+
         // 1. Delete all relational data first
-        await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-        await supabase.from('tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('quiz_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('expense_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('savings_goals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('transactions').delete().neq('id', zeroUuid);
+        await supabase.from('tasks').delete().neq('id', zeroUuid);
+        await supabase.from('quiz_results').delete().neq('id', zeroUuid);
+        await supabase.from('expense_requests').delete().neq('id', zeroUuid);
+        await supabase.from('savings_goals').delete().neq('id', zeroUuid);
         
         // 2. Delete teacher created quizzes
         await supabase.from('quizzes').delete().eq('created_by', 'TEACHER');
 
-        // 3. Delete all users EXCEPT the admin
-        const { error: profileError } = await supabase.from('profiles').delete().neq('id', adminUid);
+        // 3. Delete all users EXCEPT the admin AND other teachers
+        // Preserve self (adminUid) AND anyone with role 'MAESTRA'
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .delete()
+            .neq('id', adminUid)
+            .neq('role', 'MAESTRA');
         
         if (profileError) return { success: false, error: profileError.message };
 
