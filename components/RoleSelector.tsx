@@ -216,7 +216,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                 className="w-28 h-28 object-contain mb-2 drop-shadow-xl hover:scale-105 transition-transform duration-300 animate-float"
              />
              <h1 className="text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">Gemabit</h1>
-             <p className="text-violet-100 font-bold text-sm">¡Aprende y Gana!</p>
+             <p className="text-violet-100 font-bold text-sm">Ahorra, aprende y gana</p>
            </div>
            
            <div className="absolute top-4 right-4 z-20">
