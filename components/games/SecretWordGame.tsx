@@ -4,7 +4,8 @@ import { Heart, RefreshCw } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 
 export const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const originalWord = quiz.answer?.trim().toUpperCase() || '';
+  // FIX: Check options[0] first as the answer is now stored there to avoid schema errors
+  const originalWord = (quiz.answer || (quiz.options && quiz.options[0]) || '').trim().toUpperCase();
   
   // Custom normalization: Accents -> Base, but keep Ñ
   const normalizeChar = (char: string) => {

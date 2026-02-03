@@ -93,8 +93,8 @@ export interface Quiz {
   options?: string[];
   correctIndex?: number;
 
-  // SECRET WORD
-  answer?: string; // The secret word
+  // SECRET WORD (Deprecated in DB, use options[0])
+  answer?: string; 
 
   // SENTENCE, SORTING
   gameItems?: QuizGameItem[]; // Generic items list for games
