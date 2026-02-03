@@ -269,8 +269,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
           setShowResetModal(false);
           setResetConfirmString('');
           alert("✅ El sistema se ha reiniciado. La base de datos está limpia.");
-          loadData();
-          window.location.reload();
+          // FIX: Force go to root to prevent 404 on reload
+          window.location.href = '/';
       } else {
           alert("Error al reiniciar: " + result.error);
       }
@@ -1408,6 +1408,48 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                 {isCreatingQuiz ? <RefreshCw className="animate-spin mx-auto"/> : 'CREAR DESAFÍO'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM FACTORY RESET MODAL (ADDED) */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-[120] backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 text-center relative overflow-hidden shadow-2xl border-8 border-red-500">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 border-4 border-red-200">
+                <TriangleAlert size={40} />
+            </div>
+            
+            <h2 className="text-2xl font-black text-red-600 mb-2 uppercase tracking-tight">¡Peligro Extremo!</h2>
+            <p className="text-xs font-bold text-slate-500 mb-6 leading-relaxed">
+               Estás a punto de borrar <strong>TODO</strong>: Alumnos, Tareas, Juegos, Monedas. <br/>
+               Solo quedarán las cuentas de Maestras.
+            </p>
+
+            <div className="space-y-4">
+               <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Escribe "REINICIAR" para confirmar</label>
+                  <input 
+                    type="text" 
+                    placeholder="REINICIAR"
+                    value={resetConfirmString}
+                    onChange={e => setResetConfirmString(e.target.value)}
+                    className="w-full bg-red-50 border-2 border-red-200 rounded-xl p-3 text-center font-black text-red-600 focus:outline-none focus:border-red-500 uppercase"
+                  />
+               </div>
+
+               <button 
+                 onClick={handleMasterReset}
+                 disabled={resetConfirmString.toUpperCase() !== 'REINICIAR' || actionLoading}
+                 className="w-full bg-red-600 text-white font-black py-4 rounded-xl shadow-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
+               >
+                 {actionLoading ? <RefreshCw className="animate-spin mx-auto"/> : 'BORRAR TODO'}
+               </button>
+               
+               <button onClick={() => setShowResetModal(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600">
+                  CANCELAR
+               </button>
+            </div>
           </div>
         </div>
       )}

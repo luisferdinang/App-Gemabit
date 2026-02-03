@@ -5,12 +5,13 @@ import { StudentView } from './components/StudentView';
 import { TeacherView } from './components/TeacherView';
 import { ParentView } from './components/ParentView';
 import { User } from './types';
-import { supabaseService } from './services/supabaseService';
+import { supabaseService, mapProfileToUser } from './services/supabaseService';
 import { supabase } from './services/supabaseClient';
 import { RefreshCw } from 'lucide-react';
+import { useUserStore } from './store/userStore';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, setUser, updateUserFields } = useUserStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function App() {
           console.log("Restoring session for:", session.user.email);
           const userProfile = await supabaseService.getStudentById(session.user.id);
           if (userProfile) {
-            setCurrentUser(userProfile);
+            setUser(userProfile);
           }
         }
       } catch (error) {
@@ -34,10 +35,10 @@ export default function App() {
 
     checkSession();
 
-    // 2. Listen for auth changes (optional, keeps state in sync)
+    // 2. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
+        setUser(null);
         setLoading(false);
       }
     });
@@ -47,17 +48,46 @@ export default function App() {
     };
   }, []);
 
-  // Function to refresh user data (e.g. after earning coins or profile updates)
+  // 3. GLOBAL REALTIME LISTENER FOR CURRENT USER
+  // This ensures that whenever the DB changes (balance, xp, etc.), the UI updates INSTANTLY
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log("Setting up Realtime Listener for User:", currentUser.uid);
+
+    const subscription = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, (payload) => {
+        if (payload && payload.new) {
+            console.log("⚡️ REALTIME UPDATE RECEIVED:", payload.new);
+            // Optimistically update the store without a network fetch
+            const updatedFields: Partial<User> = {
+                balance: payload.new.balance,
+                xp: payload.new.xp,
+                streakWeeks: payload.new.streak_weeks,
+                status: payload.new.status,
+                avatar: payload.new.avatar_url,
+                displayName: payload.new.display_name,
+                // Add other mapped fields if necessary
+            };
+            updateUserFields(updatedFields);
+        }
+    });
+
+    return () => {
+        subscription.unsubscribe();
+    };
+  }, [currentUser?.uid]); // Only recreate if UID changes
+
+  // Legacy refresh function (still used by some components for deep refreshes)
   const handleRefreshUser = async () => {
     if (currentUser) {
       const updated = await supabaseService.getStudentById(currentUser.uid);
-      if (updated) setCurrentUser({ ...updated });
+      if (updated) setUser({ ...updated });
     }
   };
 
   const handleLogout = async () => {
     await supabaseService.logout();
-    setCurrentUser(null);
+    setUser(null);
   };
 
   if (loading) {
@@ -75,7 +105,7 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <RoleSelector onLogin={setCurrentUser} />;
+    return <RoleSelector onLogin={setUser} />;
   }
 
   return (

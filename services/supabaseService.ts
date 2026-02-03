@@ -10,7 +10,7 @@ export const getCurrentWeekId = () => {
 };
 
 // Helper to map DB profile to User Type
-const mapProfileToUser = (profile: any): User => ({
+export const mapProfileToUser = (profile: any): User => ({
   uid: profile.id,
   role: profile.role,
   displayName: profile.display_name,
@@ -38,15 +38,16 @@ const TASK_NAMES: Record<string, string> = {
 export const supabaseService = {
   
   // REALTIME SUBSCRIPTION HELPER
-  subscribeToChanges: (table: string, filter: string | undefined, callback: () => void) => {
+  // Changed callback signature to accept payload
+  subscribeToChanges: (table: string, filter: string | undefined, callback: (payload?: any) => void) => {
     const channel = supabase
       .channel(`public:${table}${filter ? ':' + filter : ''}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: table, filter: filter },
         (payload) => {
-          console.log('Realtime change received:', payload);
-          callback();
+          console.log(`Realtime change in ${table}:`, payload);
+          callback(payload);
         }
       )
       .subscribe();
