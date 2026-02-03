@@ -10,7 +10,7 @@ import {
   PartyPopper, Lightbulb, ArrowRight, ArrowLeft, Star, ShoppingBag, 
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, 
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
-  Crown
+  Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 
@@ -47,10 +47,18 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [actionLoading, setActionLoading] = useState(false);
   const [showDeleteStudentModal, setShowDeleteStudentModal] = useState(false); // State for custom delete student modal
 
-  // Access Code State
+  // Security / Access Code State
   const [currentAccessCode, setCurrentAccessCode] = useState('');
   const [newAccessCode, setNewAccessCode] = useState('');
   const [updatingCode, setUpdatingCode] = useState(false);
+  
+  // Teacher Password Change State
+  const [newTeacherPass, setNewTeacherPass] = useState('');
+  const [confirmTeacherPass, setConfirmTeacherPass] = useState('');
+  
+  // Factory Reset State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmString, setResetConfirmString] = useState('');
 
   // Quiz Modal State
   const [showQuizModal, setShowQuizModal] = useState(false);
@@ -59,15 +67,16 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [reward, setReward] = useState(50);
   const [assignedTo, setAssignedTo] = useState('ALL');
   
-  const [textOptions, setTextOptions] = useState(['', '', '']);
-  const [correctIndex, setCorrectIndex] = useState(0);
-  const [targetValue, setTargetValue] = useState(50); 
-  const [gameItems, setGameItems] = useState<string[]>(['', '', '']); 
+  // Dynamic Game State
+  const [textOptions, setTextOptions] = useState(['', '', '', '']); // Used for TEXT and INTRUDER
+  const [correctIndex, setCorrectIndex] = useState(0); // Used for TEXT and INTRUDER
+  const [secretWord, setSecretWord] = useState(''); // Used for SECRET_WORD
+  const [gameItems, setGameItems] = useState<string[]>(['', '', '']); // Used for SENTENCE
   const [sortItems, setSortItems] = useState<{text: string, cat: 'NEED'|'WANT'}[]>([{text: '', cat: 'NEED'}, {text: '', cat: 'WANT'}]);
 
   useEffect(() => {
     loadData();
-    if (activeTab === 'SECURITY') {
+    if (activeTab === 'SECURITY' || activeTab === 'PRESENTATION') {
         loadSecuritySettings();
     }
     if (activeTab === 'ARCADE') {
@@ -204,6 +213,46 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     }
   };
 
+  const handleTeacherPasswordChange = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newTeacherPass || newTeacherPass !== confirmTeacherPass) {
+          alert("Las contraseñas no coinciden o están vacías.");
+          return;
+      }
+      setUpdatingCode(true);
+      const result = await supabaseService.updatePassword(newTeacherPass);
+      setUpdatingCode(false);
+      
+      if (result.success) {
+          alert("¡Contraseña actualizada correctamente!");
+          setNewTeacherPass('');
+          setConfirmTeacherPass('');
+      } else {
+          alert("Error: " + result.error);
+      }
+  };
+
+  const handleMasterReset = async () => {
+      if (resetConfirmString.toUpperCase() !== 'REINICIAR') {
+          alert("Debes escribir REINICIAR para confirmar.");
+          return;
+      }
+      
+      setActionLoading(true);
+      const result = await supabaseService.resetSystemData(currentUser.uid);
+      setActionLoading(false);
+      
+      if (result.success) {
+          setShowResetModal(false);
+          setResetConfirmString('');
+          alert("✅ El sistema se ha reiniciado. La base de datos está limpia.");
+          loadData();
+          window.location.reload();
+      } else {
+          alert("Error al reiniciar: " + result.error);
+      }
+  };
+
   const handleApprove = async (uid: string) => { await supabaseService.approveUser(uid); loadData(); };
   const handleReject = async (uid: string) => { await supabaseService.rejectUser(uid); loadData(); };
   const handleApproveQuiz = async (id: string) => { await supabaseService.approveQuizRedemption(id); loadData(); };
@@ -214,7 +263,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     e.preventDefault(); // STOP PAGE RELOAD
     
     if (!question.trim()) {
-        alert("¡Escribe una pregunta o instrucción!");
+        alert("¡Escribe una pregunta, pista o instrucción!");
         return;
     }
 
@@ -231,14 +280,23 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
 
     // Mapeo de datos específicos según el tipo
     if (quizType === 'TEXT') { 
-        newQuiz.options = textOptions; 
+        newQuiz.options = textOptions.slice(0, 3); // Solo 3 opciones para Trivia
         newQuiz.correctIndex = Number(correctIndex); 
     }
-    else if (quizType === 'SENTENCE' || quizType === 'ORDERING') { 
+    else if (quizType === 'INTRUDER') {
+        newQuiz.options = textOptions; // Las 4 opciones
+        newQuiz.correctIndex = Number(correctIndex);
+    }
+    else if (quizType === 'SENTENCE') { 
         newQuiz.gameItems = gameItems.filter(t => t.trim()).map((t, i) => ({ id: `${i}`, text: t })); 
     }
-    else if (quizType === 'BALANCE') { 
-        newQuiz.targetValue = Number(targetValue); 
+    else if (quizType === 'SECRET_WORD') { 
+        if (!secretWord.trim()) {
+            alert("¡Debes escribir la palabra secreta!");
+            setIsCreatingQuiz(false);
+            return;
+        }
+        newQuiz.answer = secretWord.toUpperCase().trim();
     }
     else if (quizType === 'SORTING') { 
         newQuiz.gameItems = sortItems.filter(i => i.text.trim()).map((item, i) => ({ id: `${i}`, text: item.text, category: item.cat })); 
@@ -284,42 +342,46 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       }
   };
 
-  const resetForm = () => { setQuestion(''); setReward(50); setQuizType('TEXT'); setTextOptions(['', '', '']); setCorrectIndex(0); setGameItems(['', '', '']); setSortItems([{text: '', cat: 'NEED'}, {text: '', cat: 'WANT'}]); setAssignedTo('ALL'); };
+  const resetForm = () => { 
+      setQuestion(''); 
+      setReward(50); 
+      setQuizType('TEXT'); 
+      setTextOptions(['', '', '', '']); 
+      setCorrectIndex(0); 
+      setGameItems(['', '', '']); 
+      setSortItems([{text: '', cat: 'NEED'}, {text: '', cat: 'WANT'}]); 
+      setSecretWord('');
+      setAssignedTo('ALL'); 
+  };
   
   const getGameVisual = (type: QuizType) => {
       switch(type) {
           case 'TEXT': return { icon: <MessageCircleQuestion size={20}/>, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200', label: 'Pregunta' };
           case 'SENTENCE': return { icon: <Puzzle size={20}/>, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', label: 'Frase' };
           case 'SORTING': return { icon: <Layers size={20}/>, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', label: 'Categoría' };
-          case 'BALANCE': return { icon: <Scale size={20}/>, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Ahorro' };
-          case 'ORDERING': return { icon: <ListOrdered size={20}/>, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', label: 'Pasos' };
+          case 'SECRET_WORD': return { icon: <Key size={20}/>, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', label: 'Palabra Secreta' };
+          case 'INTRUDER': return { icon: <Ghost size={20}/>, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200', label: 'El Intruso' };
           default: return { icon: <Gamepad2 size={20}/>, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', label: 'Juego' };
       }
   };
 
   const activeStudentData = useMemo(() => students.find(s => s.uid === selectedStudent), [students, selectedStudent]);
 
-  const SQL_FIX = `
-ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE quizzes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE quiz_results DISABLE ROW LEVEL SECURITY;
-ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;
-
-ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_student_id_fkey;
-ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_student_id_fkey;
-ALTER TABLE quiz_results DROP CONSTRAINT IF EXISTS quiz_results_student_id_fkey;
-ALTER TABLE quiz_results DROP CONSTRAINT IF EXISTS quiz_results_quiz_id_fkey;
-
-ALTER TABLE tasks ADD CONSTRAINT tasks_student_id_fkey FOREIGN KEY (student_id) REFERENCES profiles(id) ON DELETE CASCADE;
-ALTER TABLE transactions ADD CONSTRAINT transactions_student_id_fkey FOREIGN KEY (student_id) REFERENCES profiles(id) ON DELETE CASCADE;
-ALTER TABLE quiz_results ADD CONSTRAINT quiz_results_student_id_fkey FOREIGN KEY (student_id) REFERENCES profiles(id) ON DELETE CASCADE;
-ALTER TABLE quiz_results ADD CONSTRAINT quiz_results_quiz_id_fkey FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE;
-
-GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
-  `;
+  // Derived metrics for Presentation Mode
+  const classTotalBalance = useMemo(() => students.reduce((sum, s) => sum + s.balance, 0), [students]);
+  const classCompletionStats = useMemo(() => {
+    let sTotal = 0, sComp = 0, hTotal = 0, hComp = 0;
+    reports.forEach(r => {
+        sTotal += r.schoolTasksTotal;
+        sComp += r.schoolTasksCompleted;
+        hTotal += r.homeTasksTotal;
+        hComp += r.homeTasksCompleted;
+    });
+    return {
+        school: sTotal > 0 ? (sComp / sTotal) * 100 : 0,
+        home: hTotal > 0 ? (hComp / hTotal) * 100 : 0
+    };
+  }, [reports]);
 
   // --- RENDER ---
   return (
@@ -359,6 +421,109 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
            </button>
         </div>
       </div>
+
+      {/* PESTAÑA ALUMNOS (DETALLES Y TAREAS) */}
+      {activeTab === 'STUDENTS' && (
+        <div className="grid md:grid-cols-4 gap-6 animate-fade-in">
+          <div className="md:col-span-1 space-y-3">
+            <h3 className="font-bold text-slate-400 text-[10px] uppercase tracking-widest mb-2 pl-2">Lista de Clase</h3>
+            {students.length === 0 && <p className="text-slate-400 text-sm text-center py-10">Esperando alumnos...</p>}
+            {students.map(s => (
+              <button 
+                key={s.uid} 
+                onClick={() => setSelectedStudent(s.uid)} 
+                className={`w-full text-left p-3 rounded-2xl flex items-center justify-between border-2 transition-all ${selectedStudent === s.uid ? 'border-violet-500 bg-violet-50 shadow-md scale-105 z-10' : 'border-white bg-white hover:border-slate-200'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-slate-100">
+                    <img src={s.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <div className="font-black text-slate-700 leading-tight text-xs">{s.displayName.split(' ')[0]}</div>
+                    {/* DISPLAY BALANCE AS GB AND MB */}
+                    <div className="text-[9px] text-slate-500 font-bold mt-0.5 flex items-center gap-1">
+                      <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-2.5 h-2.5" /> 
+                      {Math.floor(s.balance/100)} GB <span className="opacity-50">|</span> {s.balance % 100} MB
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="md:col-span-3">
+            {activeStudentData ? (
+              <div className="animate-fade-in space-y-6">
+                <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-16 h-16 rounded-2xl bg-violet-50 p-1 shrink-0 border-2 border-violet-100 overflow-hidden">
+                        <img src={activeStudentData.avatar} className="w-full h-full object-cover rounded-xl" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-xl text-slate-800">{activeStudentData.displayName}</h3>
+                          <button onClick={() => { setStudentToManage(activeStudentData); setShowManageModal(true); }} className="p-1.5 text-slate-300 hover:text-slate-500"><Settings size={18}/></button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg flex items-center gap-1 border border-emerald-200 shadow-sm">
+                            <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-3 h-3"/>
+                            {Math.floor(activeStudentData.balance / 100)} GemaBits
+                          </span>
+                          <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-3 py-1 rounded-lg flex items-center gap-1 border border-amber-200 shadow-sm">
+                            <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3"/>
+                            {activeStudentData.balance % 100} MiniBits
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => { setAssignedTo(activeStudentData.uid); setShowQuizModal(true); }} 
+                      className="w-full sm:w-auto bg-sky-500 text-white px-5 py-3 rounded-xl font-bold text-xs shadow-lg shadow-sky-100 hover:bg-sky-400 active:translate-y-1 transition-all flex items-center justify-center gap-2 border-b-4 border-sky-700"
+                    >
+                      <Plus size={16} strokeWidth={3} /> Asignar Juego
+                    </button>
+                  </div>
+
+                  <div className="border-t border-slate-50 mt-6 pt-4">
+                     <div className="flex items-center gap-3">
+                         <div className="p-2 bg-slate-100 text-slate-500 rounded-lg"><Calendar size={20}/></div>
+                         <div className="relative flex-1">
+                             <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="w-full appearance-none bg-slate-50 border-2 border-slate-100 rounded-xl p-3 pr-10 font-black text-slate-600 focus:outline-none focus:border-violet-500 transition-colors text-sm">
+                                 {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {week.weekId.split('-W')[1]} ({week.weekId === getCurrentWeekId() ? 'Actual' : week.weekId.split('-W')[0]})</option>))}
+                             </select>
+                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                         </div>
+                     </div>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-3 bg-violet-100 text-violet-600 rounded-xl"><School size={24} /></div>
+                        <h3 className="font-black text-slate-700 text-lg">Escuela</h3>
+                      </div>
+                      <TaskController studentId={activeStudentData.uid} allowedType="SCHOOL" weekId={selectedWeek} onUpdate={loadData} />
+                  </div>
+                  <div className="bg-slate-50 rounded-[2rem] p-6 border-2 border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Home size={24} /></div>
+                        <h3 className="font-black text-slate-700 text-lg">Casa</h3>
+                      </div>
+                      <TaskController studentId={activeStudentData.uid} allowedType="HOME" readOnly={true} weekId={selectedWeek} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-100 rounded-[3rem] bg-slate-50/50">
+                <School size={60} className="mb-4 text-slate-200" />
+                <p className="font-black text-lg">Selecciona un alumno para evaluar</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* PESTAÑA ARCADE (GESTIÓN DE JUEGOS) */}
       {activeTab === 'ARCADE' && (
@@ -504,216 +669,436 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
           </div>
       )}
 
-      {/* MODAL LISTA COMPLETADOS */}
-      {quizCompletionsView && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[130] backdrop-blur-sm animate-fade-in">
-           <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border-4 border-white relative max-h-[80vh] flex flex-col">
-              <button 
-                onClick={() => setQuizCompletionsView(null)} 
-                className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={20} />
-              </button>
+      {/* PESTAÑA REPORTES (ESTADÍSTICAS) */}
+      {activeTab === 'REPORTS' && (
+         <div className="space-y-6 animate-fade-in">
+             <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100">
+                 <h2 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                     <BarChart3 className="text-violet-500" /> Progreso Semanal de la Clase
+                 </h2>
+                 <p className="text-slate-400 font-bold text-sm mb-6">Resumen del cumplimiento de tareas (Semana Actual)</p>
+                 
+                 <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                         <thead>
+                             <tr className="border-b-2 border-slate-100">
+                                 <th className="py-4 pl-4 text-xs font-black text-slate-400 uppercase tracking-widest">Alumno</th>
+                                 <th className="py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-center">Escuela</th>
+                                 <th className="py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-center">Casa</th>
+                                 <th className="py-4 pr-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Saldo Total</th>
+                             </tr>
+                         </thead>
+                         <tbody>
+                             {reports.length === 0 ? (
+                                 <tr><td colSpan={4} className="text-center py-8 text-slate-400 font-bold">Sin datos disponibles</td></tr>
+                             ) : reports.map((report) => (
+                                 <tr key={report.student.uid} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                                     <td className="py-4 pl-4">
+                                         <div className="flex items-center gap-3">
+                                             <img src={report.student.avatar} className="w-10 h-10 rounded-full bg-slate-100"/>
+                                             <span className="font-black text-slate-700 text-sm">{report.student.displayName}</span>
+                                         </div>
+                                     </td>
+                                     <td className="py-4 px-2">
+                                         <div className="flex flex-col items-center gap-1">
+                                             <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                                 <div 
+                                                    className="h-full bg-violet-500 rounded-full transition-all" 
+                                                    style={{ width: `${(report.schoolTasksCompleted / Math.max(report.schoolTasksTotal, 1)) * 100}%` }}
+                                                 ></div>
+                                             </div>
+                                             <span className="text-[10px] font-bold text-slate-500">{report.schoolTasksCompleted}/{report.schoolTasksTotal}</span>
+                                         </div>
+                                     </td>
+                                     <td className="py-4 px-2">
+                                         <div className="flex flex-col items-center gap-1">
+                                             <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                                 <div 
+                                                    className="h-full bg-emerald-500 rounded-full transition-all" 
+                                                    style={{ width: `${(report.homeTasksCompleted / Math.max(report.homeTasksTotal, 1)) * 100}%` }}
+                                                 ></div>
+                                             </div>
+                                             <span className="text-[10px] font-bold text-slate-500">{report.homeTasksCompleted}/{report.homeTasksTotal}</span>
+                                         </div>
+                                     </td>
+                                     <td className="py-4 pr-4 text-right">
+                                         <div className="flex flex-col items-end">
+                                             <span className="font-black text-slate-700 text-sm flex items-center gap-1">
+                                                 <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-3 h-3"/>
+                                                 {Math.floor(report.student.balance / 100)} GB
+                                             </span>
+                                             <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                                 <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-2.5 h-2.5"/>
+                                                 {report.student.balance % 100} MB
+                                             </span>
+                                         </div>
+                                     </td>
+                                 </tr>
+                             ))}
+                         </tbody>
+                     </table>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* PESTAÑA SOLICITUDES (APROBACIONES) */}
+      {activeTab === 'APPROVALS' && (
+        <div className="space-y-8 animate-fade-in">
+          {/* USER REGISTRATIONS */}
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+             <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl relative">
+                   <UserPlus size={24} />
+                   {pendingUsers.length > 0 && <span className="absolute -top-1 -right-1 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span></span>}
+                </div>
+                <div>
+                   <h3 className="font-black text-slate-700 text-lg">Nuevos Alumnos</h3>
+                   <p className="text-slate-400 text-xs font-bold">Solicitudes de ingreso</p>
+                </div>
+             </div>
+
+             {pendingUsers.length === 0 ? (
+                <p className="text-center text-slate-400 text-sm font-bold py-4">No hay alumnos pendientes.</p>
+             ) : (
+                <div className="grid gap-4">
+                   {pendingUsers.map(user => (
+                      <div key={user.uid} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                         <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-white border-2 border-slate-200 overflow-hidden">
+                                <img src={user.avatar} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                               <p className="font-black text-slate-700">{user.displayName}</p>
+                               <p className="text-xs font-bold text-slate-400">@{user.username}</p>
+                            </div>
+                         </div>
+                         <div className="flex gap-2">
+                            <button onClick={() => handleApprove(user.uid)} className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg hover:bg-emerald-600 transition-all"><Check size={20} /></button>
+                            <button onClick={() => handleReject(user.uid)} className="p-2 bg-rose-500 text-white rounded-xl shadow-lg hover:bg-rose-600 transition-all"><X size={20} /></button>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </div>
+
+          {/* QUIZ REDEMPTIONS */}
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+             <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-violet-100 text-violet-600 rounded-2xl relative">
+                   <Gamepad2 size={24} />
+                   {pendingQuizApprovals.length > 0 && <span className="absolute -top-1 -right-1 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500"></span></span>}
+                </div>
+                <div>
+                   <h3 className="font-black text-slate-700 text-lg">Bolsas de Arcade</h3>
+                   <p className="text-slate-400 text-xs font-bold">Cobros de juegos completados</p>
+                </div>
+             </div>
+
+             {pendingQuizApprovals.length === 0 ? (
+                <p className="text-center text-slate-400 text-sm font-bold py-4">No hay cobros pendientes.</p>
+             ) : (
+                <div className="grid gap-4">
+                   {pendingQuizApprovals.map((req: any) => (
+                      <div key={req.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-violet-50 rounded-2xl border-2 border-violet-100 gap-4">
+                         <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-white border-2 border-violet-200 overflow-hidden">
+                                <img src={req.studentAvatar} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                               <p className="font-black text-slate-700">{req.studentName}</p>
+                               <div className="flex items-center gap-2 mt-1">
+                                  <span className="bg-white text-violet-600 px-2 py-0.5 rounded-md text-[10px] font-black border border-violet-100 uppercase tracking-wide">
+                                     {req.questionPreview.length > 30 ? req.questionPreview.substring(0,30)+'...' : req.questionPreview}
+                                  </span>
+                                </div>
+                            </div>
+                         </div>
+                         <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                            <div className="font-black text-slate-700 flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-100">
+                               <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-4 h-4"/> +{req.earned}
+                            </div>
+                            <div className="flex gap-2">
+                               <button onClick={() => handleApproveQuiz(req.id)} className="p-2 bg-emerald-500 text-white rounded-xl shadow-lg hover:bg-emerald-600 transition-all"><Check size={20} /></button>
+                               <button onClick={() => handleRejectQuiz(req.id)} className="p-2 bg-rose-500 text-white rounded-xl shadow-lg hover:bg-rose-600 transition-all"><X size={20} /></button>
+                            </div>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </div>
+        </div>
+      )}
+
+      {/* PESTAÑA SEGURIDAD */}
+      {activeTab === 'SECURITY' && (
+          <div className="animate-fade-in grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               
-              <div className="mb-4">
-                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                      <Trophy size={24} className="text-yellow-400" />
-                      Completado por
-                  </h3>
-                  <p className="text-xs font-bold text-slate-400">
-                      Lista de alumnos que terminaron el juego
-                  </p>
+              {/* CÓDIGO DE REGISTRO */}
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+                  <div className="flex items-center gap-3 mb-6">
+                      <div className="p-3 bg-sky-100 text-sky-600 rounded-2xl">
+                          <KeyRound size={24} />
+                      </div>
+                      <h3 className="font-black text-slate-700 text-lg">Código de Acceso</h3>
+                  </div>
+                  
+                  <div className="text-center mb-6 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                      <p className="text-slate-400 text-xs font-bold uppercase mb-1 tracking-widest">Código Actual</p>
+                      <p className="text-3xl font-black text-slate-800 tracking-[0.2em] font-mono">{currentAccessCode}</p>
+                  </div>
+
+                  <form onSubmit={handleUpdateCode} className="space-y-3">
+                      <input 
+                        type="text" 
+                        value={newAccessCode} 
+                        onChange={e => setNewAccessCode(e.target.value)} 
+                        placeholder="Nuevo código" 
+                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:border-sky-500 outline-none transition-colors text-sm"
+                      />
+                      <button disabled={updatingCode} className="w-full bg-sky-500 text-white font-black py-3 rounded-xl border-b-4 border-sky-700 active:border-b-0 active:translate-y-1 transition-all">
+                          {updatingCode ? 'Guardando...' : 'Cambiar Código'}
+                      </button>
+                  </form>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                  {(() => {
-                      const completions = allQuizResults.filter(r => r.quizId === quizCompletionsView);
-                      const uniqueStudentIds = Array.from(new Set(completions.map(c => c.studentId)));
-                      const studentsInList = uniqueStudentIds.map(id => students.find(s => s.uid === id)).filter(Boolean) as User[];
-                      
-                      if (studentsInList.length === 0) return <p className="text-slate-400 font-bold text-center py-4">Nadie aún.</p>;
+              {/* CAMBIAR CONTRASEÑA */}
+              <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+                  <div className="flex items-center gap-3 mb-6">
+                      <div className="p-3 bg-violet-100 text-violet-600 rounded-2xl">
+                          <Lock size={24} />
+                      </div>
+                      <h3 className="font-black text-slate-700 text-lg">Mi Contraseña</h3>
+                  </div>
 
-                      return studentsInList.map(s => (
-                          <div key={s.uid} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                              <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
-                                  <img src={s.avatar} className="w-full h-full object-cover"/>
-                              </div>
+                  <form onSubmit={handleTeacherPasswordChange} className="space-y-4">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Nueva Contraseña</label>
+                          <input 
+                            type="password" 
+                            value={newTeacherPass} 
+                            onChange={e => setNewTeacherPass(e.target.value)} 
+                            className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:border-violet-500 outline-none transition-colors text-sm"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">Confirmar</label>
+                          <input 
+                            type="password" 
+                            value={confirmTeacherPass} 
+                            onChange={e => setConfirmTeacherPass(e.target.value)} 
+                            className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:border-violet-500 outline-none transition-colors text-sm"
+                          />
+                      </div>
+                      <button disabled={updatingCode || !newTeacherPass} className="w-full bg-violet-500 text-white font-black py-3 rounded-xl border-b-4 border-violet-700 active:border-b-0 active:translate-y-1 transition-all mt-2">
+                          Actualizar Clave
+                      </button>
+                  </form>
+              </div>
+
+              {/* ZONA DE PELIGRO (RESET) */}
+              <div className="bg-red-50 rounded-[2.5rem] p-6 border-2 border-red-100 flex flex-col justify-between">
+                  <div>
+                      <div className="flex items-center gap-3 mb-4">
+                          <div className="p-3 bg-red-100 text-red-600 rounded-2xl">
+                              <TriangleAlert size={24} />
+                          </div>
+                          <h3 className="font-black text-red-700 text-lg">Zona de Peligro</h3>
+                      </div>
+                      <p className="text-red-500 text-xs font-bold leading-relaxed mb-6">
+                          Aquí puedes reiniciar toda la aplicación para empezar un nuevo curso escolar. Esta acción es irreversible.
+                      </p>
+                  </div>
+                  
+                  <button 
+                    onClick={() => setShowResetModal(true)}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-red-800 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest shadow-lg shadow-red-100 flex items-center justify-center gap-2"
+                  >
+                      <Trash2 size={20} /> Reinicio de Fábrica
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* PESTAÑA PRESENTACION (PROYECCION MEJORADA) */}
+      {activeTab === 'PRESENTATION' && (
+          <div className="animate-fade-in flex flex-col gap-6 bg-slate-900 rounded-[3rem] p-6 shadow-2xl border-8 border-slate-800 min-h-[80vh] relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-full bg-slate-900 z-0">
+                  <div className="absolute top-10 left-10 w-96 h-96 bg-violet-600/20 rounded-full blur-[100px]"></div>
+                  <div className="absolute bottom-10 right-10 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px]"></div>
+              </div>
+
+              {/* Header Dashboard */}
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-center bg-white/5 backdrop-blur-md rounded-3xl p-6 border border-white/10">
+                  <div>
+                      <h2 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                         <LayoutGrid className="text-yellow-400"/>
+                         Dashboard de Clase
+                      </h2>
+                      <p className="text-slate-400 font-bold text-sm mt-1">
+                         Semana Actual • {getCurrentWeekId().split('-W')[1]}
+                      </p>
+                  </div>
+                  
+                  {/* Class Wealth Counter */}
+                  <div className="mt-4 md:mt-0 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-8 py-4 text-center">
+                      <p className="text-emerald-400 text-xs font-black uppercase tracking-widest mb-1">Tesoro de la Clase</p>
+                      <div className="text-5xl font-black text-white flex items-center gap-2 justify-center drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+                          <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-10 h-10 object-contain" />
+                          {Math.floor(classTotalBalance / 100)} <span className="text-lg text-emerald-300">GB</span>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="relative z-10 grid md:grid-cols-2 gap-6 flex-1">
+                  
+                  {/* TOP 3 PODIUM */}
+                  <div className="bg-white/5 backdrop-blur-sm rounded-[2.5rem] p-8 border border-white/10 flex flex-col items-center justify-end relative">
+                      <div className="absolute top-6 left-6 text-white/50 font-black text-sm uppercase flex items-center gap-2">
+                          <Trophy size={16}/> Líderes
+                      </div>
+                      
+                      <div className="flex items-end justify-center gap-4 w-full h-64 mt-8">
+                          {(() => {
+                              const topStudents = [...students].sort((a,b) => b.balance - a.balance).slice(0,3);
+                              if (topStudents.length < 3) return <p className="text-slate-500 font-bold self-center">Faltan alumnos para el podio.</p>;
+                              
+                              const podiumOrder = [topStudents[1], topStudents[0], topStudents[2]].filter(Boolean);
+                              
+                              return podiumOrder.map((s, idx) => {
+                                  const rank = s === topStudents[0] ? 1 : s === topStudents[1] ? 2 : 3;
+                                  const height = rank === 1 ? 'h-full' : rank === 2 ? 'h-3/4' : 'h-1/2';
+                                  const color = rank === 1 ? 'bg-yellow-400' : rank === 2 ? 'bg-slate-300' : 'bg-amber-600';
+                                  const glow = rank === 1 ? 'shadow-[0_0_30px_rgba(250,204,21,0.4)]' : '';
+                                  
+                                  return (
+                                      <div key={s.uid} className={`flex flex-col items-center justify-end ${height} w-1/3 transition-all duration-1000 animate-slide-up`}>
+                                          <div className="mb-3 flex flex-col items-center">
+                                              <div className={`w-14 h-14 rounded-full border-4 border-slate-900 shadow-xl overflow-hidden bg-slate-800 mb-2 relative z-20 ${rank === 1 ? 'scale-125' : ''}`}>
+                                                  <img src={s.avatar} className="w-full h-full object-cover"/>
+                                                  {rank === 1 && <Crown size={24} className="absolute -top-3 -right-3 text-yellow-400 fill-yellow-400 animate-bounce"/>}
+                                              </div>
+                                              <span className="font-black text-white text-xs text-center truncate w-20">{s.displayName.split(' ')[0]}</span>
+                                              <span className="text-[10px] font-bold text-slate-400">{Math.floor(s.balance/100)} GB</span>
+                                          </div>
+                                          <div className={`w-full rounded-t-2xl ${color} border-t-4 border-white/20 relative shadow-xl flex items-start justify-center pt-2 h-full ${glow}`}>
+                                              <span className="text-2xl font-black text-black/30 mix-blend-overlay">{rank}</span>
+                                          </div>
+                                      </div>
+                                  )
+                              });
+                          })()}
+                      </div>
+                  </div>
+
+                  {/* STATS & CODE */}
+                  <div className="flex flex-col gap-6">
+                      
+                      {/* Weekly Progress Bars */}
+                      <div className="bg-white/5 backdrop-blur-sm rounded-[2.5rem] p-6 border border-white/10 flex-1">
+                          <h3 className="text-white/50 font-black text-sm uppercase mb-6 flex items-center gap-2">
+                             <TrendingUp size={16}/> Rendimiento Semanal
+                          </h3>
+                          
+                          <div className="space-y-6">
                               <div>
-                                  <p className="font-black text-slate-700 text-sm">{s.displayName}</p>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500">
-                                      <CheckCircle2 size={12}/> Completado
+                                  <div className="flex justify-between text-xs font-bold text-violet-300 mb-2 uppercase">
+                                      <span>Misiones Escolares</span>
+                                      <span>{Math.round(classCompletionStats.school)}%</span>
+                                  </div>
+                                  <div className="h-6 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                                      <div className="h-full bg-gradient-to-r from-violet-600 to-indigo-500 relative" style={{width: `${classCompletionStats.school}%`}}>
+                                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <div>
+                                  <div className="flex justify-between text-xs font-bold text-emerald-300 mb-2 uppercase">
+                                      <span>Misiones del Hogar</span>
+                                      <span>{Math.round(classCompletionStats.home)}%</span>
+                                  </div>
+                                  <div className="h-6 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                                      <div className="h-full bg-gradient-to-r from-emerald-600 to-teal-500 relative" style={{width: `${classCompletionStats.home}%`}}>
+                                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                      </div>
                                   </div>
                               </div>
                           </div>
-                      ));
-                  })()}
-              </div>
-           </div>
-        </div>
-      )}
+                      </div>
 
-      {/* MODAL CONFIRMACION ELIMINAR JUEGO (CUSTOM UI) */}
-      {quizToDelete && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[110] backdrop-blur-sm animate-fade-in">
-           <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border-4 border-white text-center">
-              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce-slow">
-                 <Trash2 size={32} />
-              </div>
-              <h3 className="text-xl font-black text-slate-800 mb-2">¿Eliminar Juego?</h3>
-              <p className="text-sm font-bold text-slate-500 mb-6 leading-relaxed">
-                 Esta acción eliminará el juego del Arcade para todos los alumnos.
-              </p>
-              
-              <div className="flex gap-3">
-                 <button 
-                    onClick={() => setQuizToDelete(null)}
-                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl transition-colors text-xs uppercase tracking-widest"
-                 >
-                    Cancelar
-                 </button>
-                 <button 
-                    onClick={confirmDeleteQuiz}
-                    disabled={actionLoading}
-                    className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl transition-colors shadow-lg shadow-red-200 text-xs uppercase tracking-widest flex items-center justify-center gap-2"
-                 >
-                    {actionLoading ? <RefreshCw className="animate-spin" size={16}/> : 'Sí, Eliminar'}
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* MODAL CONFIRMACION ELIMINAR ALUMNO (CUSTOM UI) */}
-      {showDeleteStudentModal && studentToManage && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[120] backdrop-blur-sm animate-fade-in">
-           <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border-4 border-white text-center relative">
-              <div className="w-20 h-20 rounded-full border-4 border-red-100 mx-auto mb-4 overflow-hidden shadow-sm bg-slate-100 relative">
-                  <img src={studentToManage.avatar} className="w-full h-full object-cover grayscale opacity-80"/>
-                  <div className="absolute inset-0 flex items-center justify-center bg-red-500/20">
-                      <X size={40} className="text-red-600" strokeWidth={3}/>
+                      {/* Access Code Card */}
+                      <div className="bg-slate-800 rounded-3xl p-4 flex items-center justify-between border border-slate-700 shadow-lg">
+                          <div className="flex items-center gap-4">
+                              <div className="bg-slate-700 p-3 rounded-2xl">
+                                  <KeyRound size={24} className="text-white"/>
+                              </div>
+                              <div>
+                                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Código de Acceso</p>
+                                  <p className="text-2xl font-mono font-black text-white tracking-[0.2em]">{currentAccessCode}</p>
+                              </div>
+                          </div>
+                          <div className="hidden sm:block text-right">
+                              <p className="text-[10px] font-bold text-slate-500">gemabit.app</p>
+                          </div>
+                      </div>
                   </div>
               </div>
-              <h3 className="text-xl font-black text-red-600 mb-2">¿Borrar Definitivamente?</h3>
-              <p className="text-sm font-bold text-slate-500 mb-2 leading-tight">
-                 Estás a punto de eliminar a <span className="text-slate-800">{studentToManage.displayName}</span>.
-              </p>
-              <p className="text-xs font-bold text-red-400 mb-6 uppercase tracking-wider bg-red-50 py-2 rounded-lg border border-red-100">
-                 ⚠️ Se perderán todos sus GemaBits
-              </p>
-              
-              <div className="flex gap-3">
-                 <button 
-                    onClick={() => setShowDeleteStudentModal(false)}
-                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl transition-colors text-xs uppercase tracking-widest"
-                 >
-                    Cancelar
-                 </button>
-                 <button 
-                    onClick={executeStudentDeletion}
-                    disabled={actionLoading}
-                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl transition-colors shadow-lg shadow-red-200 text-xs uppercase tracking-widest flex items-center justify-center gap-2 border-b-4 border-red-800 active:border-b-0 active:translate-y-1"
-                 >
-                    {actionLoading ? <RefreshCw className="animate-spin" size={16}/> : 'BORRAR AHORA'}
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* PESTAÑA ALUMNOS (DETALLES Y TAREAS) */}
-      {activeTab === 'STUDENTS' && (
-        <div className="grid md:grid-cols-4 gap-6 animate-fade-in">
-          <div className="md:col-span-1 space-y-3">
-            <h3 className="font-bold text-slate-400 text-[10px] uppercase tracking-widest mb-2 pl-2">Lista de Clase</h3>
-            {students.length === 0 && <p className="text-slate-400 text-sm text-center py-10">Esperando alumnos...</p>}
-            {students.map(s => (
-              <button 
-                key={s.uid} 
-                onClick={() => setSelectedStudent(s.uid)} 
-                className={`w-full text-left p-3 rounded-2xl flex items-center justify-between border-2 transition-all ${selectedStudent === s.uid ? 'border-violet-500 bg-violet-50 shadow-md scale-105 z-10' : 'border-white bg-white hover:border-slate-200'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-slate-100">
-                    <img src={s.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <div className="font-black text-slate-700 leading-tight text-xs">{s.displayName.split(' ')[0]}</div>
-                    <div className="text-[9px] text-slate-500 font-bold mt-0.5 flex items-center gap-1">
-                      <img src="https://i.ibb.co/VY6QpY56/supergemabit.png" className="w-2.5 h-2.5" /> {Math.floor(s.balance/100)} GB
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
           </div>
+      )}
 
-          <div className="md:col-span-3">
-            {activeStudentData ? (
-              <div className="animate-fade-in space-y-6">
-                <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 w-full">
-                      <div className="w-16 h-16 rounded-2xl bg-violet-50 p-1 shrink-0 border-2 border-violet-100 overflow-hidden">
-                        <img src={activeStudentData.avatar} className="w-full h-full object-cover rounded-xl" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-black text-xl text-slate-800">{activeStudentData.displayName}</h3>
-                          <button onClick={() => { setStudentToManage(activeStudentData); setShowManageModal(true); }} className="p-1.5 text-slate-300 hover:text-slate-500"><Settings size={18}/></button>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg flex items-center gap-1 border border-emerald-200 shadow-sm">
-                            Total: {Math.floor(activeStudentData.balance / 100)} GemaBits
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => { setAssignedTo(activeStudentData.uid); setShowQuizModal(true); }} 
-                      className="w-full sm:w-auto bg-sky-500 text-white px-5 py-3 rounded-xl font-bold text-xs shadow-lg shadow-sky-100 hover:bg-sky-400 active:translate-y-1 transition-all flex items-center justify-center gap-2 border-b-4 border-sky-700"
-                    >
-                      <Plus size={16} strokeWidth={3} /> Asignar Juego
-                    </button>
-                  </div>
-
-                  <div className="border-t border-slate-50 mt-6 pt-4">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-slate-100 text-slate-500 rounded-lg"><Calendar size={20}/></div>
-                         <div className="relative flex-1">
-                             <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="w-full appearance-none bg-slate-50 border-2 border-slate-100 rounded-xl p-3 pr-10 font-black text-slate-600 focus:outline-none focus:border-violet-500 transition-colors text-sm">
-                                 {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {week.weekId.split('-W')[1]} ({week.weekId === getCurrentWeekId() ? 'Actual' : week.weekId.split('-W')[0]})</option>))}
-                             </select>
-                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                         </div>
-                     </div>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-[2rem] p-6 border-2 border-slate-100 shadow-sm">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 bg-violet-100 text-violet-600 rounded-xl"><School size={24} /></div>
-                        <h3 className="font-black text-slate-700 text-lg">Escuela</h3>
-                      </div>
-                      <TaskController studentId={activeStudentData.uid} allowedType="SCHOOL" weekId={selectedWeek} onUpdate={loadData} />
-                  </div>
-                  <div className="bg-slate-50 rounded-[2rem] p-6 border-2 border-slate-100">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Home size={24} /></div>
-                        <h3 className="font-black text-slate-700 text-lg">Casa</h3>
-                      </div>
-                      <TaskController studentId={activeStudentData.uid} allowedType="HOME" readOnly={true} weekId={selectedWeek} />
-                  </div>
-                </div>
+      {/* PESTAÑA COMO FUNCIONA (HOW TO) */}
+      {activeTab === 'HOW_TO' && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-10">
+              <div className="text-center mb-8">
+                  <h2 className="text-3xl font-black text-slate-800 mb-2">¿Cómo funciona Gemabit?</h2>
+                  <p className="text-slate-400 font-bold">Guía rápida para maestras</p>
               </div>
-            ) : (
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-100 rounded-[3rem] bg-slate-50/50">
-                <School size={60} className="mb-4 text-slate-200" />
-                <p className="font-black text-lg">Selecciona un alumno para evaluar</p>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm flex gap-4 items-start">
+                      <div className="bg-emerald-100 text-emerald-600 p-4 rounded-2xl shrink-0"><UserPlus size={24}/></div>
+                      <div>
+                          <h3 className="font-black text-lg text-slate-800 mb-1">1. Aprobar Alumnos</h3>
+                          <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                              Los alumnos se registran con el Código Especial. Tú debes ir a la pestaña <strong>Solicitudes</strong> para aceptar su ingreso a la clase.
+                          </p>
+                      </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm flex gap-4 items-start">
+                      <div className="bg-violet-100 text-violet-600 p-4 rounded-2xl shrink-0"><CheckCircle2 size={24}/></div>
+                      <div>
+                          <h3 className="font-black text-lg text-slate-800 mb-1">2. Evaluar Diariamente</h3>
+                          <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                              En la pestaña <strong>Alumnos</strong>, selecciona un niño y marca sus logros (Asistencia, Respeto, etc.). Recibirán monedas automáticamente.
+                          </p>
+                      </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm flex gap-4 items-start">
+                      <div className="bg-sky-100 text-sky-600 p-4 rounded-2xl shrink-0"><Gamepad2 size={24}/></div>
+                      <div>
+                          <h3 className="font-black text-lg text-slate-800 mb-1">3. Crear Desafíos</h3>
+                          <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                              Usa la pestaña <strong>Juegos</strong> para crear preguntas o retos. Los alumnos los verán en su "Zona Arcade" y ganarán extra.
+                          </p>
+                      </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm flex gap-4 items-start">
+                      <div className="bg-amber-100 text-amber-600 p-4 rounded-2xl shrink-0"><Trophy size={24}/></div>
+                      <div>
+                          <h3 className="font-black text-lg text-slate-800 mb-1">4. Canjear Premios</h3>
+                          <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                              Cuando un alumno quiera gastar sus monedas (en la vida real), recibirás una alerta en <strong>Solicitudes</strong> para aprobar el gasto y descontar su saldo.
+                          </p>
+                      </div>
+                  </div>
               </div>
-            )}
           </div>
-        </div>
       )}
 
       {/* MODAL GESTIONAR ALUMNO */}
@@ -768,16 +1153,16 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
             <form onSubmit={handleCreateQuiz} className="space-y-6">
               <div className="grid grid-cols-5 gap-2">
                 {[
-                  { id: 'TEXT', icon: <MessageCircleQuestion size={20}/>, label: 'Pregunta', color: 'bg-sky-500' },
+                  { id: 'TEXT', icon: <MessageCircleQuestion size={20}/>, label: 'Trivia', color: 'bg-sky-500' },
                   { id: 'SENTENCE', icon: <Puzzle size={20}/>, label: 'Frase', color: 'bg-orange-500' },
                   { id: 'SORTING', icon: <Layers size={20}/>, label: 'Categoría', color: 'bg-violet-500' },
-                  { id: 'BALANCE', icon: <Scale size={20}/>, label: 'Ahorro', color: 'bg-emerald-500' },
-                  { id: 'ORDERING', icon: <ListOrdered size={20}/>, label: 'Pasos', color: 'bg-pink-500' },
+                  { id: 'SECRET_WORD', icon: <Key size={20}/>, label: 'Palabra', color: 'bg-pink-500' },
+                  { id: 'INTRUDER', icon: <Ghost size={20}/>, label: 'Intruso', color: 'bg-indigo-500' },
                 ].map(t => (
                   <button 
                     key={t.id} 
                     type="button" 
-                    onClick={() => setQuizType(t.id as QuizType)}
+                    onClick={() => { setQuizType(t.id as QuizType); resetForm(); setQuizType(t.id as QuizType); }}
                     className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border-2 text-[8px] font-black uppercase tracking-widest transition-all ${quizType === t.id ? `bg-white border-violet-500 text-violet-600 shadow-md scale-105 z-10` : 'bg-slate-50 border-slate-100 text-slate-400'}`}
                   >
                     <div className={`p-2 rounded-xl mb-1.5 ${quizType === t.id ? 'text-white ' + t.color : 'text-slate-300 bg-white border border-slate-100'}`}>
@@ -789,8 +1174,10 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">Instrucción / Pregunta</label>
-                <textarea required rows={2} value={question} onChange={e => setQuestion(e.target.value)} className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl p-4 font-bold text-slate-700 focus:border-violet-500 focus:bg-white focus:outline-none transition-all resize-none" placeholder="Escribe aquí la consigna..." />
+                <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">
+                    {quizType === 'SECRET_WORD' ? 'Pista Corta' : quizType === 'INTRUDER' ? 'Categoría / Contexto' : 'Instrucción / Pregunta'}
+                </label>
+                <textarea required rows={2} value={question} onChange={e => setQuestion(e.target.value)} className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl p-4 font-bold text-slate-700 focus:border-violet-500 focus:bg-white focus:outline-none transition-all resize-none" placeholder={quizType === 'SECRET_WORD' ? "Ej: Es una fruta roja..." : "Escribe aquí la consigna..."} />
               </div>
 
               {/* OPCIONES DINÁMICAS SEGÚN TIPO */}
@@ -798,7 +1185,7 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                 {quizType === 'TEXT' && (
                   <div className="space-y-3">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Opciones de respuesta</p>
-                    {textOptions.map((opt, i) => (
+                    {textOptions.slice(0,3).map((opt, i) => (
                       <div key={i} className="relative">
                         <input placeholder={`Opción ${i+1}`} value={opt} onChange={e => { const newOpts = [...textOptions]; newOpts[i] = e.target.value; setTextOptions(newOpts); }} className={`w-full bg-white border-2 rounded-xl p-3 pr-10 text-sm font-bold transition-all ${correctIndex === i ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 focus:border-violet-300'}`} />
                         <button type="button" onClick={() => setCorrectIndex(i)} className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${correctIndex === i ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'}`}><Check size={14} strokeWidth={4}/></button>
@@ -807,13 +1194,25 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                   </div>
                 )}
 
-                {(quizType === 'SENTENCE' || quizType === 'ORDERING') && (
+                {quizType === 'INTRUDER' && (
                   <div className="space-y-3">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{quizType === 'SENTENCE' ? 'Palabras de la frase (En orden correcto)' : 'Pasos (En orden correcto)'}</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lista de Elementos (Marca el Intruso)</p>
+                    {textOptions.map((opt, i) => (
+                      <div key={i} className="relative">
+                        <input placeholder={`Elemento ${i+1}`} value={opt} onChange={e => { const newOpts = [...textOptions]; newOpts[i] = e.target.value; setTextOptions(newOpts); }} className={`w-full bg-white border-2 rounded-xl p-3 pr-10 text-sm font-bold transition-all ${correctIndex === i ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 focus:border-indigo-300'}`} />
+                        <button type="button" onClick={() => setCorrectIndex(i)} className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${correctIndex === i ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-300'}`}><Ghost size={14} strokeWidth={4}/></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {quizType === 'SENTENCE' && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Palabras de la frase (En orden correcto)</p>
                     <div className="space-y-2">
                       {gameItems.map((item, i) => (
                         <div key={i} className="flex gap-2">
-                          <input value={item} onChange={e => { const newItems = [...gameItems]; newItems[i] = e.target.value; setGameItems(newItems); }} className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-sm font-bold focus:border-violet-300 transition-all" placeholder={quizType === 'SENTENCE' ? "Palabra" : "Paso"} />
+                          <input value={item} onChange={e => { const newItems = [...gameItems]; newItems[i] = e.target.value; setGameItems(newItems); }} className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-sm font-bold focus:border-violet-300 transition-all" placeholder="Palabra" />
                         </div>
                       ))}
                     </div>
@@ -821,13 +1220,13 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
                   </div>
                 )}
 
-                {quizType === 'BALANCE' && (
+                {quizType === 'SECRET_WORD' && (
                   <div className="space-y-3">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Precio objetivo a ahorrar</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Palabra Secreta</p>
                     <div className="relative">
-                      <input type="number" value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-slate-700 text-2xl focus:border-emerald-400 transition-all pr-12" />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300">MB</span>
+                      <input type="text" value={secretWord} onChange={e => setSecretWord(e.target.value.toUpperCase())} className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-slate-700 text-xl focus:border-pink-400 transition-all uppercase tracking-widest" placeholder="MANZANA" />
                     </div>
+                    <p className="text-[10px] text-slate-400 font-bold px-2">Solo letras, sin espacios.</p>
                   </div>
                 )}
 
@@ -872,140 +1271,6 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, se
               </button>
             </form>
           </div>
-        </div>
-      )}
-
-      {/* PESTAÑA SOLICITUDES */}
-      {activeTab === 'APPROVALS' && (
-        <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
-          <div>
-            <h3 className="font-black text-slate-800 text-lg mb-4 flex items-center gap-2"><UserPlus className="text-violet-500"/> Nuevas Cuentas</h3>
-            {pendingUsers.length === 0 ? (
-               <div className="bg-slate-50 rounded-3xl p-8 text-center border-2 border-slate-100 border-dashed text-slate-400 font-bold">Sin solicitudes pendientes.</div>
-            ) : (
-              <div className="space-y-3">
-                 {pendingUsers.map(u => (
-                    <div key={u.uid} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-                       <div className="flex items-center gap-3">
-                          <img src={u.avatar} className="w-12 h-12 rounded-full bg-slate-100" />
-                          <div>
-                             <p className="font-black text-slate-800">{u.displayName}</p>
-                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{u.role}</p>
-                          </div>
-                       </div>
-                       <div className="flex gap-2">
-                          <button onClick={() => handleApprove(u.uid)} className="p-2.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-100"><Check size={20}/></button>
-                          <button onClick={() => handleReject(u.uid)} className="p-2.5 bg-rose-50 text-rose-500 rounded-xl"><X size={20}/></button>
-                       </div>
-                    </div>
-                 ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <h3 className="font-black text-slate-800 text-lg mb-4 flex items-center gap-2"><Gamepad2 className="text-orange-500"/> Cobros de Arcade</h3>
-            {pendingQuizApprovals.length === 0 ? (
-               <div className="bg-slate-50 rounded-3xl p-8 text-center border-2 border-slate-100 border-dashed text-slate-400 font-bold">Sin premios por cobrar.</div>
-            ) : (
-              <div className="space-y-3">
-                 {pendingQuizApprovals.map(q => (
-                    <div key={q.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
-                       <div className="flex items-center gap-3">
-                          <img src={q.studentAvatar} className="w-10 h-10 rounded-full bg-slate-100" />
-                          <div className="flex-1">
-                             <p className="font-black text-slate-800 text-xs">{q.studentName}</p>
-                             <p className="text-[10px] font-bold text-slate-400">Completó un juego</p>
-                          </div>
-                          <div className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg font-black text-sm flex items-center gap-1">
-                             +{q.earned} MB
-                          </div>
-                       </div>
-                       <div className="bg-slate-50 p-2.5 rounded-xl text-[11px] font-bold text-slate-500 border border-slate-100">
-                          {q.questionPreview}
-                       </div>
-                       <div className="flex gap-2">
-                          <button onClick={() => handleApproveQuiz(q.id)} className="flex-1 py-2 bg-emerald-500 text-white rounded-xl font-black text-xs shadow-lg shadow-emerald-100">APROBAR</button>
-                          <button onClick={() => handleRejectQuiz(q.id)} className="px-4 py-2 bg-rose-50 text-rose-500 rounded-xl font-black text-xs">RECHAZAR</button>
-                       </div>
-                    </div>
-                 ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* PESTAÑA SEGURIDAD */}
-      {activeTab === 'SECURITY' && (
-        <div className="max-w-xl mx-auto space-y-6 animate-fade-in">
-           <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-b-[8px] border-slate-200 text-center">
-              <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                 <ShieldCheck size={40} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-800 mb-2">Seguridad del Aula</h3>
-              <p className="text-slate-400 font-bold text-sm mb-8">Administra el acceso de nuevos usuarios</p>
-
-              <div className="space-y-8 text-left">
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">Código Especial Actual</label>
-                    <div className="flex items-center gap-2 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl">
-                        <KeyRound className="text-slate-300" />
-                        <span className="font-mono font-black text-3xl text-slate-700 tracking-[0.3em] flex-1 text-center">{currentAccessCode}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-bold mt-3 pl-2 leading-tight">
-                       Este es el código que los alumnos y padres deben escribir al registrarse para poder unirse a tu clase.
-                    </p>
-                 </div>
-
-                 <form onSubmit={handleUpdateCode} className="pt-6 border-t border-slate-100">
-                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest pl-2">Cambiar Código de Acceso</label>
-                    <div className="flex gap-2">
-                       <input 
-                         type="text" 
-                         value={newAccessCode}
-                         onChange={e => setNewAccessCode(e.target.value)}
-                         placeholder="Nuevo código..."
-                         className="flex-1 bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-slate-700 outline-none focus:border-violet-500 transition-all shadow-sm"
-                       />
-                       <button disabled={!newAccessCode || updatingCode} className="bg-violet-600 text-white font-black px-6 rounded-2xl shadow-lg shadow-violet-100 active:scale-95 transition-all disabled:opacity-50">
-                          {updatingCode ? <RefreshCw className="animate-spin"/> : 'CAMBIAR'}
-                       </button>
-                    </div>
-                 </form>
-
-                 {/* SECCIÓN DE SOLUCIÓN DE PROBLEMAS SQL */}
-                 <div className="mt-8 pt-8 border-t-2 border-slate-100">
-                    <div className="bg-red-50 border-2 border-red-100 rounded-3xl p-5">
-                       <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 bg-red-100 text-red-600 rounded-xl"><Database size={20}/></div>
-                          <h4 className="font-black text-slate-700 text-sm uppercase">¡IMPORTANTE! ARREGLAR BASE DE DATOS</h4>
-                       </div>
-                       <p className="text-xs text-slate-500 font-bold mb-4 leading-relaxed">
-                          Si el botón de borrar no hace nada, ejecuta esto en Supabase.
-                          <br/>
-                          <strong>Esto forzará el borrado en cascada en la base de datos.</strong>
-                       </p>
-                       <div className="relative group">
-                          <textarea 
-                             readOnly 
-                             className="w-full h-40 bg-slate-800 text-green-400 text-[10px] font-mono p-4 rounded-xl resize-none focus:outline-none shadow-inner"
-                             value={SQL_FIX}
-                          />
-                          <button 
-                             onClick={() => {navigator.clipboard.writeText(SQL_FIX); alert("Código copiado al portapapeles.");}}
-                             className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold backdrop-blur-sm transition-colors flex items-center gap-1"
-                          >
-                             <Copy size={12} /> COPIAR CÓDIGO
-                          </button>
-                       </div>
-                       <a href="https://supabase.com/dashboard/project/_/sql" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 justify-center mt-3 text-[10px] font-black text-blue-500 hover:underline bg-blue-50 py-2 rounded-xl border border-blue-100">
-                          IR AL EDITOR SQL DE SUPABASE <ExternalLink size={12}/>
-                       </a>
-                    </div>
-                 </div>
-              </div>
-           </div>
         </div>
       )}
     </div>

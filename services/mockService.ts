@@ -126,33 +126,6 @@ const STATIC_QUIZ_BANK: Quiz[] = [
     difficulty: 'MEDIUM',
     createdBy: 'TEACHER',
     assignedTo: 'ALL'
-  },
-  // 4. Balance Game (Matemáticas Visuales)
-  {
-    id: 'q_bal_1',
-    type: 'BALANCE',
-    question: "Equilibra la balanza para pagar el juguete de 45 MB",
-    targetValue: 45,
-    reward: 120,
-    difficulty: 'HARD',
-    createdBy: 'TEACHER',
-    assignedTo: 'ALL'
-  },
-  // 5. Timeline (Ordenamiento)
-  {
-    id: 'q_order_1',
-    type: 'ORDERING',
-    question: "Ordena los pasos para comprar algo especial:",
-    gameItems: [
-      { id: '1', text: 'Elegir una meta' },
-      { id: '2', text: 'Ahorrar dinero' },
-      { id: '3', text: 'Ir a la tienda' },
-      { id: '4', text: 'Pagar y disfrutar' }
-    ],
-    reward: 80,
-    difficulty: 'EASY',
-    createdBy: 'TEACHER',
-    assignedTo: 'ALL'
   }
 ];
 

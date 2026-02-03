@@ -6,7 +6,7 @@
 
 ## 🚀 Características Principales
 
-### conomía Virtual
+### Economía Virtual
 - **MiniBits (MB):** Moneda base ganada por tareas y juegos.
 - **GemaBits (GB):** Moneda de alto valor (100 MB = 1 GB).
 - **Billetera:** Los estudiantes pueden ver su saldo en tiempo real.
@@ -18,6 +18,7 @@
     - Crea juegos educativos (Arcade).
     - Aprueba canjes de recompensas.
     - Visualiza informes de progreso.
+    - **MODO PRESENTACIÓN:** Proyecta un dashboard en tiempo real para la clase.
 2.  **Alumno (Student):**
     - Avatar personalizado (Robots).
     - Visualiza sus tareas diarias (Casa y Escuela).
@@ -35,6 +36,14 @@ Módulo de minijuegos creados por la maestra para reforzar el aprendizaje:
 - **Clasificación:** Diferenciar entre "Necesidad" vs "Deseo".
 - **Balanza Matemática:** Sumar monedas para alcanzar un precio objetivo.
 - **Secuencias:** Ordenar pasos de un proceso.
+
+### 📺 Modo Presentación (Proyector)
+En la cuenta de Maestra, la pestaña **PROYECTAR** ofrece una vista optimizada para pizarras digitales:
+- **Tema Oscuro:** Alto contraste para mejor visibilidad en proyectores.
+- **Tesoro de la Clase:** Suma total de todos los GemaBits de los alumnos (meta colectiva).
+- **Podio en Vivo:** Muestra a los 3 alumnos con más saldo.
+- **Gráficos Semanales:** Barras de progreso de tareas escolares vs. hogar.
+- **Código de Acceso:** Visible pero discreto para nuevos ingresos.
 
 ### 🛠 Tecnología
 

@@ -3,7 +3,7 @@ import { User, TaskLog, Quiz, QuizResult, QuizGameItem, QuizType, ExpenseRequest
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { soundService } from '../services/soundService';
 import { STUDENT_AVATARS as AVATAR_OPTIONS } from './RoleSelector'; 
-import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus, Target, Mountain, Heart, Star, SmilePlus, Meh, Frown, TrendingUp, Calendar, ArrowUpCircle, ArrowDownCircle, History, Medal } from 'lucide-react';
+import { CheckCircle2, Diamond, Trophy, X, ShoppingBag, QrCode, PlayCircle, PartyPopper, Zap, BookOpen, ShieldCheck, Smile, HeartHandshake, Hand, Sparkles, School, Home, Gamepad2, BrainCircuit, Lock, Coins, Clock, AlertCircle, RefreshCw, ArrowUp, ArrowDown, Scale, GripVertical, Check, Wallet, Send, MessageCircleQuestion, Puzzle, Layers, ListOrdered, Pencil, PiggyBank, Plus, Target, Mountain, Heart, Star, SmilePlus, Meh, Frown, TrendingUp, Calendar, ArrowUpCircle, ArrowDownCircle, History, Medal, Key, Ghost } from 'lucide-react';
 
 interface StudentViewProps {
   student: User;
@@ -58,23 +58,23 @@ const getGameTypeStyles = (type: QuizType) => {
         border: 'border-violet-200',
         text: 'text-violet-600'
       };
-    case 'BALANCE':
+    case 'SECRET_WORD':
       return { 
-        label: 'Balanza', 
-        icon: <Scale size={24} />, 
-        color: 'bg-emerald-500', 
-        light: 'bg-emerald-50', 
-        border: 'border-emerald-200',
-        text: 'text-emerald-600'
-      };
-    case 'ORDERING':
-      return { 
-        label: 'Secuencia', 
-        icon: <ListOrdered size={24} />, 
+        label: 'Palabra Secreta', 
+        icon: <Key size={24} />, 
         color: 'bg-pink-500', 
         light: 'bg-pink-50', 
         border: 'border-pink-200',
         text: 'text-pink-600'
+      };
+    case 'INTRUDER':
+      return { 
+        label: 'El Intruso', 
+        icon: <Ghost size={24} />, 
+        color: 'bg-indigo-500', 
+        light: 'bg-indigo-50', 
+        border: 'border-indigo-200',
+        text: 'text-indigo-600'
       };
     case 'TEXT':
     default:
@@ -244,145 +244,114 @@ const SortingGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void 
   );
 };
 
-// 3. Balance Game
-const BalanceGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const [currentWeight, setCurrentWeight] = useState(0);
-  const target = quiz.targetValue || 50;
-  
-  const coins = [1, 5, 10, 20];
+// 3. Secret Word Game (Concept Hangman - No Violence)
+const SecretWordGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
+  const secretWord = quiz.answer?.toUpperCase() || '';
+  const [guessedLetters, setGuessedLetters] = useState<Set<string>>(new Set());
+  const [mistakes, setMistakes] = useState(0);
+  const maxLives = 6;
 
-  const addCoin = (val: number) => {
-    if (currentWeight + val <= target + 20) {
-       setCurrentWeight(prev => prev + val);
-    }
-  };
+  const handleGuess = (letter: string) => {
+    if (guessedLetters.has(letter) || mistakes >= maxLives) return;
 
-  const resetScale = () => setCurrentWeight(0);
+    const newGuessed = new Set(guessedLetters);
+    newGuessed.add(letter);
+    setGuessedLetters(newGuessed);
 
-  const checkBalance = () => {
-    if (currentWeight === target) {
-      onComplete();
+    if (!secretWord.includes(letter)) {
+      setMistakes(prev => prev + 1);
+      soundService.playPop(); // Negative feedback sound could be added
     } else {
-      alert(currentWeight < target ? "Falta dinero..." : "¡Te has pasado! Quita peso.");
-      if (currentWeight > target) resetScale();
+      soundService.playCoin();
     }
   };
-
-  return (
-     <div className="space-y-6">
-        <div className="flex justify-center items-end gap-8 h-32 relative mb-4">
-           <div className="flex flex-col items-center gap-2 transition-all duration-500" style={{ transform: `translateY(${currentWeight < target ? '-10px' : currentWeight > target ? '10px' : '0px'})` }}>
-              <div className="w-24 h-24 bg-slate-200 rounded-full border-4 border-slate-300 flex items-center justify-center flex-col">
-                 <span className="text-2xl font-black text-slate-500">{currentWeight}</span>
-                 <span className="text-[10px] font-bold text-slate-400 uppercase">Tus Monedas</span>
-              </div>
-              <div className="w-0.5 h-10 bg-slate-300"></div>
-           </div>
-
-           <div className="flex flex-col items-center gap-2">
-              <div className="w-24 h-24 bg-violet-100 rounded-full border-4 border-violet-300 flex items-center justify-center flex-col shadow-lg shadow-violet-200">
-                 <span className="text-2xl font-black text-violet-600">{target}</span>
-                 <span className="text-[10px] font-bold text-violet-400 uppercase">Precio</span>
-              </div>
-              <div className="w-0.5 h-10 bg-slate-300"></div>
-           </div>
-
-           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-2 bg-slate-800 rounded-full"></div>
-           <div className="absolute bottom-[-10px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-b-[40px] border-b-slate-800"></div>
-        </div>
-
-        <div className="flex justify-center gap-4">
-           {coins.map(val => (
-             <button 
-               key={val}
-               onClick={() => addCoin(val)}
-               className="w-16 h-16 rounded-full bg-yellow-400 border-b-4 border-yellow-600 text-yellow-900 font-black text-xl shadow-lg active:scale-95 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center"
-             >
-               {val}
-             </button>
-           ))}
-        </div>
-
-        <div className="flex gap-4">
-           <button onClick={resetScale} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">
-              <RefreshCw className="mx-auto mb-1" size={20}/> Reiniciar
-           </button>
-           <button 
-             onClick={checkBalance}
-             className="flex-[2] bg-violet-500 text-white font-black py-3 rounded-xl border-b-4 border-violet-700 active:translate-y-1 active:border-b-0 transition-all"
-           >
-              ¡Pagar!
-           </button>
-        </div>
-     </div>
-  );
-};
-
-// 4. Ordering Game (Timeline)
-const OrderingGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
-  const [items, setItems] = useState<QuizGameItem[]>([]);
 
   useEffect(() => {
-    if (quiz.gameItems) {
-       setItems([...quiz.gameItems].sort(() => Math.random() - 0.5));
+    // Check Win
+    const isWin = secretWord.split('').every(char => guessedLetters.has(char));
+    if (isWin && secretWord.length > 0) {
+      setTimeout(onComplete, 500);
     }
-  }, [quiz]);
+  }, [guessedLetters, secretWord]);
 
-  const moveItem = (index: number, direction: 'UP' | 'DOWN') => {
-     const newItems = [...items];
-     const targetIndex = direction === 'UP' ? index - 1 : index + 1;
-     
-     if (targetIndex >= 0 && targetIndex < items.length) {
-        [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
-        setItems(newItems);
-     }
-  };
+  useEffect(() => {
+      // Check Loss
+      if (mistakes >= maxLives) {
+          alert(`¡Oh no! Se acabaron los intentos. La palabra era: ${secretWord}`);
+          // Reset logic could go here or parent handles it
+      }
+  }, [mistakes]);
 
-  const checkOrder = () => {
-     const currentIds = items.map(i => i.id).join(',');
-     const correctIds = quiz.gameItems ? [...quiz.gameItems].sort((a,b) => a.id.localeCompare(b.id)).map(i => i.id).join(',') : '';
-
-     if (currentIds === correctIds) {
-        onComplete();
-     } else {
-        alert("El orden no es correcto. ¡Piensa qué va primero!");
-     }
-  };
+  const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ".split('');
 
   return (
-    <div className="space-y-4">
-       <div className="space-y-2">
-          {items.map((item, idx) => (
-             <div key={item.id} className="flex items-center gap-2 bg-white p-3 rounded-2xl border-2 border-slate-100 shadow-sm animate-fade-in">
-                <div className="bg-slate-100 text-slate-400 font-black w-8 h-8 rounded-full flex items-center justify-center text-sm">
-                   {idx + 1}
-                </div>
-                <span className="flex-1 font-bold text-slate-700">{item.text}</span>
-                <div className="flex flex-col gap-1">
-                   <button 
-                     onClick={() => moveItem(idx, 'UP')}
-                     disabled={idx === 0}
-                     className="p-1 text-slate-400 hover:text-sky-500 disabled:opacity-30"
-                   >
-                      <ArrowUp size={20}/>
-                   </button>
-                   <button 
-                     onClick={() => moveItem(idx, 'DOWN')}
-                     disabled={idx === items.length - 1}
-                     className="p-1 text-slate-400 hover:text-sky-500 disabled:opacity-30"
-                   >
-                      <ArrowDown size={20}/>
-                   </button>
-                </div>
+    <div className="space-y-6">
+       <div className="flex justify-center gap-1 mb-4">
+          {[...Array(maxLives)].map((_, i) => (
+             <Heart 
+               key={i} 
+               size={24} 
+               className={`${i < (maxLives - mistakes) ? 'text-pink-500 fill-pink-500 animate-pulse' : 'text-slate-200 fill-slate-100'}`} 
+             />
+          ))}
+       </div>
+
+       <div className="flex flex-wrap justify-center gap-2 min-h-[60px] p-4 bg-pink-50 rounded-2xl border-2 border-pink-100">
+          {secretWord.split('').map((char, index) => (
+             <div key={index} className="w-10 h-12 flex items-center justify-center border-b-4 border-pink-400 font-black text-xl text-pink-700">
+                {guessedLetters.has(char) ? char : ''}
              </div>
           ))}
        </div>
-       <button 
-          onClick={checkOrder}
-          className="w-full bg-sky-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-sky-700 active:translate-y-1 active:border-b-0 transition-all mt-4"
-       >
-          ¡Listo!
-       </button>
+
+       <div className="flex flex-wrap gap-1.5 justify-center">
+          {alphabet.map(letter => {
+             const isGuessed = guessedLetters.has(letter);
+             const isCorrect = secretWord.includes(letter);
+             
+             let btnClass = "bg-white border-slate-200 text-slate-700 hover:bg-slate-50";
+             if (isGuessed) {
+                btnClass = isCorrect ? "bg-emerald-500 border-emerald-700 text-white" : "bg-slate-200 border-slate-300 text-slate-400 opacity-50";
+             }
+
+             return (
+               <button
+                 key={letter}
+                 onClick={() => handleGuess(letter)}
+                 disabled={isGuessed || mistakes >= maxLives}
+                 className={`w-9 h-10 rounded-lg font-bold border-b-4 active:border-b-0 active:translate-y-1 transition-all text-sm ${btnClass}`}
+               >
+                 {letter}
+               </button>
+             )
+          })}
+       </div>
+    </div>
+  );
+};
+
+// 4. Intruder Game (Grid Selection)
+const IntruderGame = ({ quiz, onComplete }: { quiz: Quiz, onComplete: () => void }) => {
+  
+  const handleSelect = (index: number) => {
+     if (index === quiz.correctIndex) {
+        onComplete();
+     } else {
+        alert("Ese sí pertenece al grupo. ¡Busca el diferente!");
+     }
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-4 py-4">
+       {quiz.options?.map((opt, idx) => (
+          <button
+             key={idx}
+             onClick={() => handleSelect(idx)}
+             className="aspect-square bg-white rounded-3xl border-4 border-slate-100 shadow-sm hover:border-indigo-400 hover:shadow-lg transition-all flex items-center justify-center p-4 active:scale-95 group"
+          >
+             <span className="font-black text-slate-700 text-lg group-hover:text-indigo-600">{opt}</span>
+          </button>
+       ))}
     </div>
   );
 };
@@ -827,10 +796,10 @@ export const StudentView: React.FC<StudentViewProps> = ({ student, refreshUser }
               return <SentenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
           case 'SORTING':
               return <SortingGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
-          case 'BALANCE':
-              return <BalanceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
-          case 'ORDERING':
-              return <OrderingGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
+          case 'SECRET_WORD':
+              return <SecretWordGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
+          case 'INTRUDER':
+              return <IntruderGame quiz={activeQuiz} onComplete={handleQuizSuccess} />;
           case 'TEXT':
           default:
               return (

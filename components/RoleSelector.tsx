@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { supabaseService } from '../services/supabaseService';
-import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info, Download, Share, PlusSquare, X, Smartphone } from 'lucide-react';
+import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info, Download, Share, PlusSquare, X, Smartphone, Eye, EyeOff } from 'lucide-react';
 
 interface RoleSelectorProps {
   onLogin: (user: User) => void;
@@ -42,6 +42,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   // Form State
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
   const [fullName, setFullName] = useState('');
   const [securityCode, setSecurityCode] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(STUDENT_AVATARS[0].url);
@@ -100,6 +101,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   const resetForm = () => {
     setUsername('');
     setPassword('');
+    setShowPassword(false);
     setFullName('');
     setSecurityCode('');
     setError('');
@@ -302,14 +304,22 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
               <label className="block text-xs font-bold text-slate-400 mb-1 uppercase pl-2">Contraseña</label>
               <div className="relative">
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl py-3 px-4 pl-10 font-bold text-slate-700 focus:outline-none focus:border-violet-500 transition-colors"
+                  className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl py-3 px-4 pl-10 pr-10 font-bold text-slate-700 focus:outline-none focus:border-violet-500 transition-colors"
                   placeholder="••••••••"
                   required
                 />
                 <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 

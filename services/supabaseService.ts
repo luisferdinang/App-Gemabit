@@ -121,6 +121,30 @@ export const supabaseService = {
     return { success: true };
   },
 
+  // SYSTEM RESET (FACTORY RESET)
+  resetSystemData: async (adminUid: string): Promise<{success: boolean, error?: string}> => {
+    try {
+        // 1. Delete all relational data first
+        await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        await supabase.from('tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('quiz_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('expense_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('savings_goals').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        
+        // 2. Delete teacher created quizzes
+        await supabase.from('quizzes').delete().eq('created_by', 'TEACHER');
+
+        // 3. Delete all users EXCEPT the admin
+        const { error: profileError } = await supabase.from('profiles').delete().neq('id', adminUid);
+        
+        if (profileError) return { success: false, error: profileError.message };
+
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+  },
+
   register: async (userData: Partial<User>, specialCode: string): Promise<{success: boolean, error?: string}> => {
     if (userData.role === 'MAESTRA') {
         return { success: false, error: 'Acceso denegado. El registro de nuevas maestras está bloqueado.' };
@@ -254,6 +278,7 @@ export const supabaseService = {
   // TASK MANAGEMENT
   getTasks: async (studentId: string, weekId: string = getCurrentWeekId()): Promise<TaskLog[]> => {
     let { data } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId);
+    
     if (!data || data.length === 0) {
       const { data: student } = await supabase.from('profiles').select('status').eq('id', studentId).single();
       if (!student || student.status.includes('DELETED')) return [];
@@ -264,7 +289,23 @@ export const supabaseService = {
       ]).select();
       data = newTasks;
     }
-    return (data || []).map(t => ({ id: t.id, studentId: t.student_id, weekId: t.week_id, type: t.type, status: t.status, updatedAt: new Date(t.updated_at).getTime() }));
+
+    // DEDUPLICATE
+    const uniqueTasksMap = new Map<string, any>();
+    (data || []).forEach(t => {
+       if (!uniqueTasksMap.has(t.type)) {
+           uniqueTasksMap.set(t.type, t);
+       }
+    });
+
+    return Array.from(uniqueTasksMap.values()).map(t => ({ 
+        id: t.id, 
+        studentId: t.student_id, 
+        weekId: t.week_id, 
+        type: t.type, 
+        status: t.status, 
+        updatedAt: new Date(t.updated_at).getTime() 
+    }));
   },
 
   getStudentWeeks: async (studentId: string): Promise<{weekId: string, completion: number}[]> => {
@@ -289,16 +330,30 @@ export const supabaseService = {
 
   updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()) => {
     const { data: tasks } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId).eq('type', type);
+    // Take the first one if duplicate exists
     const task = tasks?.[0];
+    
     if (task) {
+       // IMPORTANT: Check if value is actually changing to prevent double assignment
+       if (task.status[key] === value) return false;
+
        const newStatus = { ...task.status, [key]: value };
        await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
+       
+       // Reward logic: School 20, Home 25
        const reward = type === 'SCHOOL' ? 20 : 25;
        const change = value ? reward : -reward;
+       
        const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
        if (student) {
           await supabase.from('profiles').update({ balance: student.balance + change }).eq('id', studentId);
-          await supabase.from('transactions').insert({ student_id: studentId, amount: change, description: value ? `Tarea: ${key}` : `Revocada: ${key}`, type: change > 0 ? 'EARN' : 'SPEND', timestamp: Date.now() });
+          await supabase.from('transactions').insert({ 
+              student_id: studentId, 
+              amount: change, 
+              description: value ? `Tarea: ${key}` : `Revocada: ${key}`, 
+              type: change > 0 ? 'EARN' : 'SPEND', 
+              timestamp: Date.now() 
+          });
        }
        return true;
     }

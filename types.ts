@@ -74,8 +74,8 @@ export interface SavingsGoal {
   icon: string; // Just a string identifier for now
 }
 
-// GAME TYPES
-export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'BALANCE' | 'ORDERING';
+// GAME TYPES - UPDATED
+export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'SECRET_WORD' | 'INTRUDER';
 
 export interface QuizGameItem {
   id: string;
@@ -87,19 +87,19 @@ export interface QuizGameItem {
 export interface Quiz {
   id: string;
   type: QuizType; // New field
-  question: string; // Main instruction or question
+  question: string; // Main instruction or Hint
   
-  // TEXT QUIZ
+  // TEXT QUIZ & INTRUDER
   options?: string[];
   correctIndex?: number;
 
-  // SENTENCE QUIZ
-  // correctOrder provided in gameData or derived
-  
-  // SORTING, ORDERING, SENTENCE
+  // SECRET WORD
+  answer?: string; // The secret word
+
+  // SENTENCE, SORTING
   gameItems?: QuizGameItem[]; // Generic items list for games
   
-  // BALANCE
+  // BALANCE (Deprecated fields kept optional to prevent breakage if existing data exists)
   targetValue?: number;
 
   reward: number; // MiniBits
