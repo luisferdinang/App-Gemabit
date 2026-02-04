@@ -1,3 +1,4 @@
+
 // Data Models reflecting the Firestore Structure Request
 
 export type UserRole = 'MAESTRA' | 'PADRE' | 'ALUMNO';
@@ -74,8 +75,8 @@ export interface SavingsGoal {
   icon: string; // Just a string identifier for now
 }
 
-// GAME TYPES - UPDATED
-export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'SECRET_WORD' | 'INTRUDER';
+// GAME TYPES - UPDATED (MEMORY replaced by SEQUENCE)
+export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'SEQUENCE' | 'INTRUDER';
 
 export interface QuizGameItem {
   id: string;
@@ -89,12 +90,9 @@ export interface Quiz {
   type: QuizType; // New field
   question: string; // Main instruction or Hint
   
-  // TEXT QUIZ & INTRUDER
-  options?: string[];
+  // TEXT QUIZ & INTRUDER & SEQUENCE
+  options?: string[]; // Used for Sequence items in correct order
   correctIndex?: number;
-
-  // SECRET WORD (Deprecated in DB, use options[0])
-  answer?: string; 
 
   // SENTENCE, SORTING
   gameItems?: QuizGameItem[]; // Generic items list for games
@@ -106,6 +104,9 @@ export interface Quiz {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   assignedTo?: string | 'ALL'; // 'ALL' or Student UID
   createdBy?: 'AI' | 'TEACHER';
+  
+  // Legacy field support
+  answer?: string; 
 }
 
 // IN_BAG: Completed locally, waiting for student to "Cash Out"

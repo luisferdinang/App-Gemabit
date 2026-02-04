@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User, TaskLog, Quiz, QuizResult, ExpenseRequest, SavingsGoal, ExpenseCategory, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
@@ -15,7 +16,7 @@ import { getGameTypeStyles } from '../utils/gameUtils';
 import { getTaskVisuals } from '../utils/taskUtils';
 import { SentenceGame } from './games/SentenceGame';
 import { SortingGame } from './games/SortingGame';
-import { SecretWordGame } from './games/SecretWordGame';
+import { SequenceGame } from './games/SequenceGame';
 import { IntruderGame } from './games/IntruderGame';
 import { useUserStore, UserState } from '../store/userStore';
 
@@ -234,7 +235,16 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
   const { filteredTransactions, totalEarned, totalSpent } = useMemo(() => { const now = new Date(); now.setHours(0, 0, 0, 0); const filtered = financeTransactions.filter(t => { const tDate = new Date(t.timestamp); tDate.setHours(0, 0, 0, 0); if (financeTimeframe === 'DAY') return tDate.getTime() === now.getTime(); if (financeTimeframe === 'WEEK') { const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7); return tDate >= weekAgo; } if (financeTimeframe === 'MONTH') { const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30); return tDate >= monthAgo; } return true; }); const earned = filtered.filter(t => t.type === 'EARN').reduce((sum, t) => sum + t.amount, 0); const spent = filtered.filter(t => t.type === 'SPEND').reduce((sum, t) => sum + Math.abs(t.amount), 0); return { filteredTransactions: filtered, totalEarned: earned, totalSpent: spent }; }, [financeTransactions, financeTimeframe]);
   const weeklyProgress = useMemo(() => { let totalTasks = 0; let completedTasks = 0; tasks.forEach(t => { totalTasks += Object.keys(t.status).length; completedTasks += Object.values(t.status).filter(Boolean).length; }); return totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0; }, [tasks]);
 
-  const renderActiveGame = () => { if (!activeQuiz) return null; switch (activeQuiz.type) { case 'SENTENCE': return <SentenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SORTING': return <SortingGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'SECRET_WORD': return <SecretWordGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'INTRUDER': return <IntruderGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; case 'TEXT': default: return ( <div className="space-y-3 mb-6"> {activeQuiz.options?.map((opt, idx) => ( <button key={idx} onClick={() => handleTextAnswer(idx)} className="w-full text-left p-4 rounded-2xl border-4 border-slate-100 font-bold text-slate-600 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-all active:scale-95 text-lg" > {opt} </button> ))} </div> ); } };
+  const renderActiveGame = () => { 
+    if (!activeQuiz) return null; 
+    switch (activeQuiz.type) { 
+        case 'SENTENCE': return <SentenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; 
+        case 'SORTING': return <SortingGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; 
+        case 'SEQUENCE': return <SequenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; 
+        case 'INTRUDER': return <IntruderGame quiz={activeQuiz} onComplete={handleQuizSuccess} />; 
+        case 'TEXT': default: return ( <div className="space-y-3 mb-6"> {activeQuiz.options?.map((opt, idx) => ( <button key={idx} onClick={() => handleTextAnswer(idx)} className="w-full text-left p-4 rounded-2xl border-4 border-slate-100 font-bold text-slate-600 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-all active:scale-95 text-lg" > {opt} </button> ))} </div> ); 
+    } 
+  };
 
   const schoolTask = tasks.find(t => t.type === 'SCHOOL');
   const homeTask = tasks.find(t => t.type === 'HOME');

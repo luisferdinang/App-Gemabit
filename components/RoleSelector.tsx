@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { supabaseService } from '../services/supabaseService';
-import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info, Download, Share, PlusSquare, X, Smartphone, Eye, EyeOff } from 'lucide-react';
+import { Lock, User as UserIcon, GraduationCap, Baby, KeyRound, ShieldCheck, UserPlus, LogIn, CheckCircle2, Info, Download, Share, PlusSquare, X, Smartphone, Eye, EyeOff, HelpCircle } from 'lucide-react';
+import { TutorialModal } from './TutorialModal';
 
 interface RoleSelectorProps {
   onLogin: (user: User) => void;
@@ -62,6 +63,9 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Tutorial State
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -208,8 +212,12 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans relative">
+      {/* TUTORIAL MODAL */}
+      {showTutorial && <TutorialModal onClose={() => setShowTutorial(false)} />}
+
       <div className="w-full max-w-md bg-white rounded-[2rem] shadow-xl border-b-8 border-slate-200 overflow-hidden relative z-10">
         <div className="bg-violet-500 p-8 text-center relative overflow-hidden">
+           
            {/* INSTALL BUTTON */}
            {(!isInstalled && (deferredPrompt || isIOS)) && (
              <div className="absolute top-4 left-4 z-20">
@@ -222,6 +230,17 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onLogin }) => {
                 </button>
              </div>
            )}
+
+           {/* TUTORIAL TRIGGER BUTTON */}
+           <div className="absolute top-4 left-4 z-20 md:left-auto md:right-32 lg:right-32">
+              <button 
+                onClick={() => setShowTutorial(true)}
+                className="text-white bg-white/20 hover:bg-white/30 rounded-full p-1.5 transition-colors border-2 border-white/20"
+                title="¿Cómo funciona?"
+              >
+                <HelpCircle size={20} strokeWidth={2.5} />
+              </button>
+           </div>
 
            <div className="relative z-10 flex flex-col items-center">
              <img 
