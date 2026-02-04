@@ -232,7 +232,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         soundService.playSuccess();
         loadData(); 
     } else {
-        alert(`❌ ERROR DE SUPABASE:\n\n${result.error}`);
+        alert(`❌ ERROR DE SUPABASE:\n\n${(result as any).error}`);
         setShowDeleteStudentModal(false);
     }
   };
@@ -1173,4 +1173,185 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                   <div className="space-y-3">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Items para clasificar</p>
                     <div className="space-y-2">
-                      {sort
+                      {sortItems.map((item, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input value={item.text} placeholder="Ej. Chocolate" onChange={e => { const newItems = [...sortItems]; newItems[i].text = e.target.value; setSortItems(newItems); }} className="flex-1 bg-white border-2 border-slate-200 rounded-xl p-3 text-sm font-bold focus:border-violet-300 transition-all" />
+                          <select value={item.cat} onChange={e => { const newItems = [...sortItems]; newItems[i].cat = e.target.value as 'NEED' | 'WANT'; setSortItems(newItems); }} className={`rounded-xl border-2 text-[9px] font-black p-2 outline-none uppercase tracking-widest ${item.cat === 'NEED' ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-rose-100 border-rose-300 text-rose-700'}`}>
+                            <option value="NEED">Vital</option>
+                            <option value="WANT">Deseo</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setSortItems([...sortItems, {text: '', cat: 'NEED'}])} className="text-[10px] font-black text-violet-500 hover:text-violet-700 flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 rounded-lg w-fit mt-2 border border-violet-100 shadow-sm"><Plus size={14} strokeWidth={4}/> AGREGAR</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase pl-2 tracking-widest">Premio (MB)</label>
+                  <div className="relative">
+                    <input type="number" min="1" max="500" value={reward} onChange={e => setReward(Number(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-black text-slate-700 focus:border-violet-500 focus:bg-white focus:outline-none transition-all" />
+                    <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase pl-2 tracking-widest">Asignar A</label>
+                  <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-black text-slate-700 focus:border-violet-500 focus:bg-white focus:outline-none transition-all text-[11px]">
+                    <option value="ALL">⭐️ TODA LA CLASE</option>
+                    {students.map(s => (<option key={s.uid} value={s.uid}>{s.displayName.toUpperCase()}</option>))}
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isCreatingQuiz} className="w-full bg-violet-600 text-white font-black py-5 rounded-2xl border-b-[8px] border-violet-800 active:translate-y-1.5 active:border-b-0 transition-all uppercase tracking-widest mt-6 shadow-xl shadow-violet-100 text-sm disabled:opacity-50">
+                {isCreatingQuiz ? <RefreshCw className="animate-spin mx-auto"/> : 'CREAR DESAFÍO'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR BORRAR JUEGO (FIXED) */}
+      {quizToDelete && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[120] backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full p-6 shadow-2xl border-4 border-red-100 relative text-center">
+             <div className="bg-red-100 p-4 rounded-full inline-block mb-4 text-red-500 animate-bounce-slow">
+               <Trash2 size={32} />
+             </div>
+             <h3 className="font-black text-xl text-slate-800 mb-2">¿Borrar este Juego?</h3>
+             <p className="text-xs font-bold text-slate-400 mb-6 px-4">
+               Esta acción es permanente. Los alumnos dejarán de verlo en su Arcade.
+             </p>
+             <div className="flex gap-3">
+               <button 
+                 onClick={() => setQuizToDelete(null)}
+                 className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl transition-colors border-2 border-transparent"
+               >
+                 Cancelar
+               </button>
+               <button 
+                 onClick={confirmDeleteQuiz}
+                 disabled={actionLoading}
+                 className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl shadow-lg border-b-4 border-red-700 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2"
+               >
+                 {actionLoading ? <RefreshCw className="animate-spin" size={18}/> : 'Sí, Borrar'}
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR BORRAR ALUMNO */}
+      {showDeleteStudentModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[110] backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full p-6 shadow-2xl border-4 border-red-100 relative text-center">
+             <div className="bg-red-100 p-4 rounded-full inline-block mb-4 text-red-500">
+               <ShieldAlert size={32} />
+             </div>
+             <h3 className="font-black text-xl text-slate-800 mb-2">Expulsar Alumno</h3>
+             <p className="text-xs font-bold text-slate-400 mb-6 px-4">
+               ¿Seguro que quieres eliminar a <span className="text-slate-800">{studentToManage?.displayName}</span>? Se perderá todo su progreso.
+             </p>
+             <div className="flex gap-3">
+               <button 
+                 onClick={() => setShowDeleteStudentModal(false)}
+                 className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl transition-colors"
+               >
+                 Cancelar
+               </button>
+               <button 
+                 onClick={executeStudentDeletion}
+                 disabled={actionLoading}
+                 className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-black rounded-xl shadow-lg border-b-4 border-red-700 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2"
+               >
+                 {actionLoading ? <RefreshCw className="animate-spin" size={18}/> : 'EXPULSAR'}
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADMINISTRAR ALUMNO (Reset Password) */}
+      {showManageModal && studentToManage && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100] backdrop-blur-sm animate-fade-in">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-6 shadow-2xl relative overflow-hidden">
+              <button onClick={() => setShowManageModal(false)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"><X size={20}/></button>
+              
+              <div className="flex items-center gap-4 mb-6">
+                  <div className="w-16 h-16 bg-slate-100 rounded-2xl overflow-hidden border-2 border-slate-200">
+                      <img src={studentToManage.avatar} className="w-full h-full object-cover"/>
+                  </div>
+                  <div>
+                      <h3 className="font-black text-lg text-slate-800 leading-tight">{studentToManage.displayName}</h3>
+                      <p className="text-xs font-bold text-slate-400 uppercase">Gestión de Cuenta</p>
+                  </div>
+              </div>
+
+              <div className="space-y-6">
+                  <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                      <h4 className="font-black text-slate-600 text-xs uppercase mb-3 flex items-center gap-2"><KeyRound size={14}/> Nueva Contraseña</h4>
+                      <form onSubmit={handleAdminResetPass} className="flex gap-2">
+                          <input required type="text" value={newStudentPass} onChange={e => setNewStudentPass(e.target.value)} placeholder="Escribe aquí..." className="flex-1 bg-white border-2 border-slate-200 rounded-xl px-3 py-2 text-sm font-bold focus:border-violet-500 outline-none" />
+                          <button disabled={actionLoading} className="bg-violet-500 text-white p-2 rounded-xl border-b-4 border-violet-700 active:border-b-0 active:translate-y-1 transition-all"><Check size={18} strokeWidth={3}/></button>
+                      </form>
+                  </div>
+
+                  <div className="border-t-2 border-slate-100 pt-4">
+                      <h4 className="font-black text-red-500 text-xs uppercase mb-3 flex items-center gap-2"><ShieldAlert size={14}/> Zona de Peligro</h4>
+                      <div className="space-y-2">
+                          <p className="text-[10px] font-bold text-slate-400 mb-2">Para eliminar este alumno, escribe "ELIMINAR" abajo:</p>
+                          <input type="text" value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="ELIMINAR" className="w-full bg-red-50 border-2 border-red-100 rounded-xl px-3 py-2 text-sm font-black text-red-600 focus:border-red-400 outline-none placeholder-red-200" />
+                          <button onClick={handleRequestDeleteStudent} disabled={deleteConfirm.toUpperCase() !== 'ELIMINAR'} className="w-full bg-white border-2 border-red-100 text-red-500 font-black py-3 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                              <Trash2 size={16}/> Eliminar Cuenta
+                          </button>
+                      </div>
+                  </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL RESET DE FABRICA */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-red-900/90 flex items-center justify-center p-4 z-[120] backdrop-blur-md animate-fade-in text-center">
+            <div className="bg-white rounded-[3rem] w-full max-w-md p-8 shadow-2xl border-8 border-red-500 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-4 bg-stripes-red opacity-20"></div>
+                <div className="mb-6 inline-block p-6 bg-red-100 text-red-600 rounded-full animate-pulse">
+                    <AlertTriangle size={48} strokeWidth={2.5}/>
+                </div>
+                <h2 className="text-3xl font-black text-slate-800 mb-2">¿Reiniciar Todo?</h2>
+                <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">
+                    Esto borrará <b>todos</b> los alumnos, tareas, monedas y juegos. La App volverá a estar vacía como el primer día.<br/><br/>
+                    <span className="text-red-500">Esta acción no se puede deshacer.</span>
+                </p>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 mb-6 text-left">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-1">Confirmación de Seguridad</label>
+                    <input 
+                        type="text" 
+                        placeholder='Escribe "REINICIAR"'
+                        value={resetConfirmString}
+                        onChange={e => setResetConfirmString(e.target.value)}
+                        className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 font-black text-slate-700 outline-none focus:border-red-500 transition-colors"
+                    />
+                </div>
+
+                <div className="flex gap-3">
+                    <button onClick={() => setShowResetModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-colors">Cancelar</button>
+                    <button 
+                        onClick={handleMasterReset} 
+                        disabled={resetConfirmString.toUpperCase() !== 'REINICIAR' || actionLoading}
+                        className="flex-1 py-4 bg-red-600 text-white font-black rounded-2xl shadow-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
+                    >
+                        {actionLoading ? 'Borrando...' : 'REINICIAR'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
