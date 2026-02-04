@@ -12,7 +12,7 @@ import {
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, 
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
   Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert, TrendingDown,
-  Heart, SmilePlus, Meh, Frown
+  Heart, SmilePlus, Meh, Frown, Coins
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { getWeekDateRange } from '../utils/dateUtils';
@@ -590,6 +590,101 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         </div>
       )}
 
+      {/* PESTAÑA APROBACIONES (SOLICITUDES) */}
+      {activeTab === 'APPROVALS' && (
+        <div className="animate-fade-in space-y-8">
+          
+          {/* SECCIÓN: NUEVOS ALUMNOS */}
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100 relative overflow-hidden">
+             <div className="flex items-center gap-3 mb-6 relative z-10">
+                <div className="p-3 bg-violet-100 text-violet-600 rounded-xl">
+                   <UserPlus size={24} />
+                </div>
+                <div>
+                   <h3 className="font-black text-slate-700 text-lg">Nuevos Ingresos</h3>
+                   <p className="text-xs font-bold text-slate-400">Alumnos esperando entrar a la clase</p>
+                </div>
+                {pendingUsers.length > 0 && <span className="bg-violet-500 text-white text-xs font-black px-2 py-1 rounded-full">{pendingUsers.length}</span>}
+             </div>
+
+             {pendingUsers.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                   <p className="text-slate-400 font-bold text-sm">Todo al día. No hay solicitudes nuevas.</p>
+                </div>
+             ) : (
+                <div className="grid gap-3">
+                   {pendingUsers.map(user => (
+                      <div key={user.uid} className="flex items-center justify-between p-3 bg-white border-2 border-slate-100 rounded-2xl hover:border-violet-200 transition-colors shadow-sm">
+                         <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                               <img src={user.avatar} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                               <p className="font-black text-slate-700">{user.displayName}</p>
+                               <p className="text-xs font-bold text-slate-400">@{user.username}</p>
+                            </div>
+                         </div>
+                         <div className="flex gap-2">
+                            <button onClick={() => handleApprove(user.uid)} className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-200 transition-colors" title="Aprobar"><Check size={20} strokeWidth={3}/></button>
+                            <button onClick={() => handleReject(user.uid)} className="p-2 bg-rose-100 text-rose-600 rounded-xl hover:bg-rose-200 transition-colors" title="Rechazar"><X size={20} strokeWidth={3}/></button>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </div>
+
+          {/* SECCIÓN: COBROS DE ARCADE */}
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100 relative overflow-hidden">
+             <div className="flex items-center gap-3 mb-6 relative z-10">
+                <div className="p-3 bg-sky-100 text-sky-600 rounded-xl">
+                   <Wallet size={24} />
+                </div>
+                <div>
+                   <h3 className="font-black text-slate-700 text-lg">Caja del Arcade</h3>
+                   <p className="text-xs font-bold text-slate-400">Pagos pendientes por juegos ganados</p>
+                </div>
+                {pendingQuizApprovals.length > 0 && <span className="bg-sky-500 text-white text-xs font-black px-2 py-1 rounded-full">{pendingQuizApprovals.length}</span>}
+             </div>
+
+             {pendingQuizApprovals.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                   <p className="text-slate-400 font-bold text-sm">La caja está vacía. Nadie ha cobrado hoy.</p>
+                </div>
+             ) : (
+                <div className="grid gap-3">
+                   {pendingQuizApprovals.map(req => (
+                      <div key={req.id} className="flex items-center justify-between p-3 bg-white border-2 border-slate-100 rounded-2xl hover:border-sky-200 transition-colors shadow-sm">
+                         <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                               <img src={req.studentAvatar} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                               <p className="font-black text-slate-700">{req.studentName}</p>
+                               <div className="flex items-center gap-1 text-xs font-bold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-lg w-fit mt-1">
+                                  <Gamepad2 size={12}/> {req.questionPreview}
+                               </div>
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-3">
+                            <div className="text-right">
+                               <span className="block font-black text-emerald-500 text-lg">+{req.earned} MB</span>
+                               <span className="text-[10px] font-bold text-slate-400">Por Cobrar</span>
+                            </div>
+                            <div className="flex gap-1 flex-col">
+                               <button onClick={() => handleApproveQuiz(req.id)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors"><Check size={16} strokeWidth={3}/></button>
+                               <button onClick={() => handleRejectQuiz(req.id)} className="p-1.5 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-colors"><X size={16} strokeWidth={3}/></button>
+                            </div>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+          </div>
+
+        </div>
+      )}
+
       {/* PESTAÑA ARCADE (GESTIÓN DE JUEGOS) */}
       {activeTab === 'ARCADE' && (
           <div className="space-y-6 animate-fade-in">
@@ -731,6 +826,153 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                       })}
                   </div>
               )}
+          </div>
+      )}
+
+      {/* PESTAÑA REPORTES */}
+      {activeTab === 'REPORTS' && (
+          <div className="animate-fade-in space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                  {/* EXPENSES REPORT */}
+                  <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                          <div className="p-3 bg-rose-100 text-rose-600 rounded-xl"><ShoppingBag size={24}/></div>
+                          <h3 className="font-black text-slate-700 text-lg">Gastos de la Clase</h3>
+                      </div>
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                          {classExpenses.length === 0 ? <p className="text-center text-slate-400 font-bold text-sm">Sin gastos registrados.</p> : classExpenses.map(exp => (
+                              <div key={exp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
+                                          <img src={exp.studentAvatar} className="w-full h-full object-cover"/>
+                                      </div>
+                                      <div>
+                                          <p className="font-black text-slate-700 text-xs">{exp.studentName}</p>
+                                          <p className="text-[10px] text-slate-500 font-bold">{exp.description}</p>
+                                      </div>
+                                  </div>
+                                  <div className="text-right">
+                                      <span className="font-black text-rose-500 text-sm">-{exp.amount}</span>
+                                      <p className="text-[9px] font-bold text-slate-400">{new Date(exp.createdAt).toLocaleDateString()}</p>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  {/* COMPLETION METRICS */}
+                  <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border-2 border-slate-100">
+                      <div className="flex items-center gap-3 mb-6">
+                          <div className="p-3 bg-violet-100 text-violet-600 rounded-xl"><BarChart3 size={24}/></div>
+                          <h3 className="font-black text-slate-700 text-lg">Rendimiento Semanal</h3>
+                      </div>
+                      <div className="space-y-6">
+                          <div>
+                              <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
+                                  <span>Misiones Escuela</span>
+                                  <span>{Math.round(classCompletionStats.school)}%</span>
+                              </div>
+                              <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-violet-500 rounded-full transition-all" style={{width: `${classCompletionStats.school}%`}}></div>
+                              </div>
+                          </div>
+                          <div>
+                              <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
+                                  <span>Misiones Hogar</span>
+                                  <span>{Math.round(classCompletionStats.home)}%</span>
+                              </div>
+                              <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{width: `${classCompletionStats.home}%`}}></div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* PESTAÑA PRESENTACIÓN (PROYECTOR) */}
+      {activeTab === 'PRESENTATION' && (
+          <div className="fixed inset-0 z-[100] bg-slate-900 text-white p-8 overflow-y-auto">
+              <div className="max-w-7xl mx-auto space-y-12">
+                  <div className="flex justify-between items-center border-b-4 border-slate-700 pb-6">
+                      <div className="flex items-center gap-4">
+                          <Projector size={40} className="text-yellow-400 animate-pulse"/>
+                          <div>
+                              <h1 className="text-4xl font-black tracking-tight">Tablero de Clase</h1>
+                              <p className="text-slate-400 font-bold text-lg">Semana Actual</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setActiveTab('STUDENTS')} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-2xl font-bold border-2 border-slate-600 transition-all">
+                          Salir del Modo Proyector
+                      </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      {/* TESORO DE LA CLASE */}
+                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-[3rem] p-8 relative overflow-hidden shadow-2xl shadow-amber-900/50">
+                          <div className="relative z-10 text-center">
+                              <h3 className="text-amber-100 font-black text-xl uppercase tracking-widest mb-4">Tesoro de la Clase</h3>
+                              <div className="text-7xl font-black drop-shadow-lg flex items-center justify-center gap-2">
+                                  {classTotalBalance > 1000 ? (classTotalBalance/1000).toFixed(1) + 'k' : classTotalBalance}
+                                  <span className="text-3xl opacity-80">MB</span>
+                              </div>
+                              <p className="text-amber-200 font-bold text-sm mt-4">MiniBits Totales Acumulados</p>
+                          </div>
+                          <Coins size={200} className="absolute -bottom-10 -right-10 text-amber-400/30 rotate-12"/>
+                      </div>
+
+                      {/* PODIO */}
+                      <div className="md:col-span-2 bg-slate-800 rounded-[3rem] p-8 border-4 border-slate-700 shadow-2xl relative overflow-hidden">
+                          <div className="flex justify-between items-end h-full px-8 pb-4 gap-4">
+                              {/* 2nd Place */}
+                              {students.length > 1 && (
+                                  <div className="flex-1 flex flex-col items-center justify-end">
+                                      <div className="w-20 h-20 rounded-full border-4 border-slate-600 overflow-hidden mb-4 shadow-lg">
+                                          <img src={[...students].sort((a,b)=>b.balance - a.balance)[1].avatar} className="w-full h-full object-cover"/>
+                                      </div>
+                                      <div className="w-full bg-slate-600 h-32 rounded-t-3xl flex flex-col items-center justify-center border-t-4 border-slate-500 relative">
+                                          <span className="text-4xl font-black text-slate-400">2</span>
+                                          <p className="font-bold text-slate-300 mt-2 text-center leading-tight px-2">{[...students].sort((a,b)=>b.balance - a.balance)[1].displayName.split(' ')[0]}</p>
+                                      </div>
+                                  </div>
+                              )}
+                              {/* 1st Place */}
+                              {students.length > 0 && (
+                                  <div className="flex-1 flex flex-col items-center justify-end">
+                                      <Crown size={48} className="text-yellow-400 mb-2 animate-bounce-slow"/>
+                                      <div className="w-24 h-24 rounded-full border-4 border-yellow-400 overflow-hidden mb-4 shadow-xl shadow-yellow-400/20">
+                                          <img src={[...students].sort((a,b)=>b.balance - a.balance)[0].avatar} className="w-full h-full object-cover"/>
+                                      </div>
+                                      <div className="w-full bg-yellow-500 h-48 rounded-t-3xl flex flex-col items-center justify-center border-t-4 border-yellow-300 relative shadow-lg shadow-yellow-900/50">
+                                          <span className="text-6xl font-black text-yellow-900">1</span>
+                                          <p className="font-black text-yellow-900 mt-2 text-xl text-center leading-tight px-2">{[...students].sort((a,b)=>b.balance - a.balance)[0].displayName.split(' ')[0]}</p>
+                                          <div className="absolute top-4 right-4 bg-white/20 px-2 py-1 rounded-lg text-xs font-black text-yellow-900">{[...students].sort((a,b)=>b.balance - a.balance)[0].balance} MB</div>
+                                      </div>
+                                  </div>
+                              )}
+                              {/* 3rd Place */}
+                              {students.length > 2 && (
+                                  <div className="flex-1 flex flex-col items-center justify-end">
+                                      <div className="w-20 h-20 rounded-full border-4 border-amber-700 overflow-hidden mb-4 shadow-lg">
+                                          <img src={[...students].sort((a,b)=>b.balance - a.balance)[2].avatar} className="w-full h-full object-cover"/>
+                                      </div>
+                                      <div className="w-full bg-amber-800 h-24 rounded-t-3xl flex flex-col items-center justify-center border-t-4 border-amber-600 relative">
+                                          <span className="text-4xl font-black text-amber-500">3</span>
+                                          <p className="font-bold text-amber-400 mt-2 text-center leading-tight px-2">{[...students].sort((a,b)=>b.balance - a.balance)[2].displayName.split(' ')[0]}</p>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* CÓDIGO DE ACCESO (BIG) */}
+                  <div className="bg-slate-800 rounded-[2rem] p-6 text-center border-2 border-slate-700">
+                      <p className="text-slate-400 uppercase tracking-widest font-bold text-sm mb-2">Código para unirse a la clase</p>
+                      <p className="text-5xl font-mono font-black text-emerald-400 tracking-[0.5em]">{currentAccessCode}</p>
+                  </div>
+              </div>
           </div>
       )}
 
