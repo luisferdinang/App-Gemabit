@@ -12,7 +12,7 @@ import {
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, 
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
   Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert, TrendingDown,
-  Heart, SmilePlus, Meh, Frown, Brain
+  Heart, SmilePlus, Meh, Frown
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { getWeekDateRange } from '../utils/dateUtils';
@@ -916,7 +916,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                 
                 {quizType === 'SEQUENCE' && (
                   <div className="space-y-3">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pasos en Orden Correcto (1 -> 4)</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pasos en Orden Correcto (1 a 4)</p>
                     {textOptions.map((opt, i) => (
                       <div key={i} className="relative">
                          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 font-black text-xs">#{i+1}</div>
