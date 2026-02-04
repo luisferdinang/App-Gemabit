@@ -200,6 +200,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         alert(`Contraseña de ${studentToManage.displayName} actualizada.`);
         setNewStudentPass('');
         setShowManageModal(false);
+    } else {
+        alert("Error: " + result.error);
     }
   };
 
@@ -232,7 +234,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         soundService.playSuccess();
         loadData(); 
     } else {
-        alert(`❌ ERROR DE SUPABASE:\n\n${(result as any).error}`);
+        alert(`❌ ERROR DE SUPABASE:\n\n${result.error}`);
         setShowDeleteStudentModal(false);
     }
   };
@@ -664,7 +666,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                                <p className="font-black text-slate-700">{req.studentName}</p>
                                <div className="flex items-center gap-1 text-xs font-bold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-lg w-fit mt-1">
                                   <Gamepad2 size={12}/> {req.questionPreview}
-                               </div>
+                                </div>
                             </div>
                          </div>
                          <div className="flex items-center gap-3">

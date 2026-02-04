@@ -1,3 +1,5 @@
+
+
 import { supabase } from './supabaseClient';
 import { User, TaskLog, Quiz, QuizResult, ExpenseRequest, SavingsGoal, Transaction, StudentReport, ExpenseCategory, QuizType } from '../types';
 
@@ -105,10 +107,6 @@ export const supabaseService = {
       if (data.password !== password) return { error: 'Contraseña incorrecta' };
       if (data.status !== 'APPROVED') return { error: 'Cuenta pendiente de aprobación.' };
       
-      // Simulate session for RLS if we were using it, or just return user
-      // Note: If using real Auth, RLS works. Here we rely on the client knowing the user.
-      // To make App.tsx restore session work, we would need real auth. 
-      // Assuming we are sticking to "profiles table auth" for now as per the code pattern.
       return { user: mapProfileToUser(data) };
   },
 
@@ -226,14 +224,18 @@ export const supabaseService = {
       if (!req) return { success: false, error: 'Solicitud no encontrada.' };
 
       if (req.status !== 'PENDING') {
-          return { success: false, error: 'Esta solicitud ya fue procesada.' };
+          return { success: false, error: 'Esta solicitud ya fue procesada anteriormente.' };
       }
 
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', req.student_id).single();
+      if (!student) return { success: false, error: 'Alumno no encontrado.' };
+
       if (student.balance < req.amount) {
-          return { success: false, error: 'Saldo insuficiente.' };
+          // Can't approve if balance too low now
+          return { success: false, error: 'El saldo del alumno es insuficiente ahora.' };
       }
 
+      // Perform transaction
       await supabase.from('profiles').update({ balance: student.balance - req.amount }).eq('id', req.student_id);
       await supabase.from('transactions').insert({ 
           student_id: req.student_id, 
@@ -242,6 +244,7 @@ export const supabaseService = {
           type: 'SPEND', 
           timestamp: Date.now() 
       });
+      
       await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
       return { success: true };
   },
@@ -317,6 +320,8 @@ export const supabaseService = {
       if (!goal) return { success: false, error: 'Meta no encontrada' };
       
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
+      if (!student) return { success: false, error: 'Alumno no encontrado' };
+      
       if (student.balance < amount) return { success: false, error: 'Saldo insuficiente' };
 
       await supabase.from('profiles').update({ balance: student.balance - amount }).eq('id', goal.student_id);
@@ -337,6 +342,7 @@ export const supabaseService = {
       if (goal.current_amount < amount) return { success: false, error: 'Monto en meta insuficiente' };
 
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
+      if (!student) return { success: false, error: 'Alumno no encontrado' };
 
       await supabase.from('profiles').update({ balance: student.balance + amount }).eq('id', goal.student_id);
       await supabase.from('savings_goals').update({ current_amount: goal.current_amount - amount }).eq('id', goalId);
@@ -478,6 +484,7 @@ export const supabaseService = {
       if (!result || result.status !== 'PENDING') return;
 
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', result.student_id).single();
+      if (!student) return;
       
       await supabase.from('profiles').update({ balance: student.balance + result.earned }).eq('id', result.student_id);
       await supabase.from('transactions').insert({
@@ -558,7 +565,7 @@ export const supabaseService = {
 
   adminResetStudentPassword: async (uid: string, newPass: string) => {
       const { error } = await supabase.from('profiles').update({ password: newPass }).eq('id', uid);
-      return { success: !error };
+      return { success: !error, error: error?.message };
   },
 
   deleteStudent: async (uid: string) => {
@@ -572,12 +579,24 @@ export const supabaseService = {
   },
 
   resetSystemData: async (teacherUid: string) => {
-      await supabase.from('profiles').delete().neq('id', teacherUid);
-      await supabase.from('tasks').delete().neq('id', 0);
-      await supabase.from('transactions').delete().neq('id', 0);
-      await supabase.from('quiz_results').delete().neq('id', 0);
-      await supabase.from('expense_requests').delete().neq('id', 0);
-      await supabase.from('savings_goals').delete().neq('id', 0);
+      const { error: e1 } = await supabase.from('profiles').delete().neq('id', teacherUid);
+      if (e1) return { success: false, error: e1.message };
+      
+      const { error: e2 } = await supabase.from('tasks').delete().neq('id', 0);
+      if (e2) return { success: false, error: e2.message };
+
+      const { error: e3 } = await supabase.from('transactions').delete().neq('id', 0);
+      if (e3) return { success: false, error: e3.message };
+
+      const { error: e4 } = await supabase.from('quiz_results').delete().neq('id', 0);
+      if (e4) return { success: false, error: e4.message };
+
+      const { error: e5 } = await supabase.from('expense_requests').delete().neq('id', 0);
+      if (e5) return { success: false, error: e5.message };
+
+      const { error: e6 } = await supabase.from('savings_goals').delete().neq('id', 0);
+      if (e6) return { success: false, error: e6.message };
+
       return { success: true };
   },
 
@@ -586,6 +605,7 @@ export const supabaseService = {
       if (!student) throw new Error("Código inválido");
 
       const { data: parent } = await supabase.from('profiles').select('linked_student_ids').eq('id', parentUid).single();
+      if (!parent) throw new Error("Padre no encontrado");
       const currentLinks = parent.linked_student_ids || [];
       
       if (!currentLinks.includes(student.id)) {
