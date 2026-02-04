@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw } from 'lucide-react';
 import { getWeekDateRange } from '../utils/dateUtils';
+import { soundService } from '../services/soundService';
 
 interface ParentViewProps {
   currentUser: User;
@@ -14,6 +16,9 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [linkCode, setLinkCode] = useState('');
+  
+  // Refresh State
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
@@ -75,6 +80,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
       setPendingExpenses(expenses);
     }
+  };
+
+  const handleManualRefresh = async () => {
+      if (isRefreshing) return;
+      setIsRefreshing(true);
+      soundService.playPop();
+      
+      await loadParentData();
+      if (selectedChild) {
+          await loadChildHistory(selectedChild);
+          await loadChildWeeks(selectedChild);
+      }
+      
+      setTimeout(() => setIsRefreshing(false), 800);
   };
 
   const loadChildHistory = async (childId: string) => {
@@ -160,12 +179,22 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     <div>
       <div className="flex justify-between items-center mb-6">
          <h2 className="text-2xl font-black text-slate-800">Panel de Padres</h2>
-         <button 
-           onClick={() => setIsLinking(!isLinking)}
-           className="bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-700 transition-colors shadow-lg shadow-slate-300"
-         >
-           <LinkIcon size={16} /> Vincular Alumno
-         </button>
+         <div className="flex gap-2">
+             <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing}
+                className="bg-white text-slate-400 hover:text-slate-600 p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-200 transition-all active:scale-95 shadow-sm"
+                title="Actualizar Datos"
+             >
+                <RefreshCw size={20} className={isRefreshing ? 'animate-spin text-emerald-500' : ''} />
+             </button>
+             <button 
+               onClick={() => setIsLinking(!isLinking)}
+               className="bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-700 transition-colors shadow-lg shadow-slate-300 active:scale-95"
+             >
+               <LinkIcon size={16} /> Vincular Alumno
+             </button>
+         </div>
       </div>
 
       {isLinking && (
