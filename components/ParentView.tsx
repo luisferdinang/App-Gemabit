@@ -23,6 +23,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
   const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
+  const [processingId, setProcessingId] = useState<string | null>(null); // To prevent double clicks
 
   // Week Navigation State
   const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
@@ -134,12 +135,31 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   };
 
   const handleApproveExpense = async (id: string) => {
-      const result = await supabaseService.approveExpense(id);
-      if (result && !result.success) alert("Error: " + result.error);
+      if (processingId) return;
+      setProcessingId(id);
+      
+      try {
+          const result = await supabaseService.approveExpense(id);
+          if (result && result.success) {
+              soundService.playSuccess();
+              alert("✅ Gasto aprobado correctamente.");
+              loadParentData(); // Forzar recarga inmediata
+          } else {
+              alert("Error: " + (result?.error || "Desconocido"));
+          }
+      } catch (e: any) {
+          alert("Error: " + e.message);
+      } finally {
+          setProcessingId(null);
+      }
   };
 
   const handleRejectExpense = async (id: string) => {
+      if (processingId) return;
+      setProcessingId(id);
       await supabaseService.rejectExpense(id);
+      setProcessingId(null);
+      loadParentData();
   };
 
   const activeKid = children.find(c => c.uid === selectedChild);
@@ -238,8 +258,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                           <div className="flex items-center gap-3">
                               <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
                               <div className="flex flex-col gap-1">
-                                  <button onClick={() => handleApproveExpense(req.id)} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-sm"><Check size={16}/></button>
-                                  <button onClick={() => handleRejectExpense(req.id)} className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300 shadow-sm"><X size={16}/></button>
+                                  <button 
+                                    onClick={() => handleApproveExpense(req.id)} 
+                                    disabled={processingId === req.id}
+                                    className={`p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-sm transition-all ${processingId === req.id ? 'opacity-50 scale-95' : ''}`}
+                                  >
+                                    {processingId === req.id ? <RefreshCw size={16} className="animate-spin"/> : <Check size={16}/>}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleRejectExpense(req.id)} 
+                                    disabled={processingId === req.id}
+                                    className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300 shadow-sm"
+                                  >
+                                    <X size={16}/>
+                                  </button>
                               </div>
                           </div>
                       </div>
