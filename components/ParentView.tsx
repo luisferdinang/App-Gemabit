@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw, CheckCircle2, Loader2 } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
 import { getWeekDateRange } from '../utils/dateUtils';
 import { soundService } from '../services/soundService';
 
@@ -20,7 +20,8 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   // States for stability and feedback
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [successIds, setSuccessIds] = useState<Set<string>>(new Set());
+  const [successId, setSuccessId] = useState<string | null>(null);
+  const [confirmingRequest, setConfirmingRequest] = useState<ExpenseRequest | null>(null);
   
   // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
@@ -36,8 +37,8 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     
     const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => { loadParentData(); });
     const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => { 
-        // Solo recargamos si no hay una operación de éxito en curso para evitar saltos en la lista
-        if (successIds.size === 0 && !processingId) {
+        // Solo recargamos si no estamos mostrando un mensaje de éxito para evitar que la lista salte
+        if (!successId && !processingId) {
             loadParentData(); 
         }
     });
@@ -50,7 +51,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         subExpenses.unsubscribe();
         subTransactions.unsubscribe();
     };
-  }, [currentUser.uid, selectedChild, processingId, successIds]);
+  }, [currentUser.uid, selectedChild, processingId, successId]);
 
   useEffect(() => {
       if (selectedChild) {
@@ -74,8 +75,8 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       }
       
       const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
-      // Solo mantenemos en el estado las que no acabamos de aprobar exitosamente
-      setPendingExpenses(expenses.filter(e => !successIds.has(e.id)));
+      // Filtro local preventivo: no mostrar los que acabamos de aprobar aunque la DB aún no se refresque
+      setPendingExpenses(expenses.filter(e => e.id !== successId));
     }
   };
 
@@ -94,32 +95,32 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       setAvailableWeeks(weeks);
   };
 
-  const handleApproveExpense = async (id: string) => {
-      if (processingId || successIds.has(id)) return;
+  const handleApproveClick = (req: ExpenseRequest) => {
+      setConfirmingRequest(req);
+  };
+
+  const executeApproval = async () => {
+      if (!confirmingRequest || processingId) return;
       
+      const id = confirmingRequest.id;
       setProcessingId(id);
+      setConfirmingRequest(null);
+
       try {
           const result = await supabaseService.approveExpense(id);
           if (result && result.success) {
               soundService.playSuccess();
+              setSuccessId(id); // Mostrar overlay de éxito
               
-              // 1. Marcar como éxito visual
-              setSuccessIds(prev => new Set(prev).add(id));
-              
-              // 2. Esperar 1.5 segundos para que el padre vea el mensaje de "APROBADO"
+              // 1. Quitarlo de la lista local inmediatamente para que el padre vea que se fue
+              setPendingExpenses(prev => prev.filter(e => e.id !== id));
+
+              // 2. Esperar un poco para el feedback visual
               setTimeout(() => {
-                  // 3. Eliminar de la lista local para que desaparezca
-                  setPendingExpenses(prev => prev.filter(e => e.id !== id));
+                  setSuccessId(null);
                   setProcessingId(null);
-                  
-                  // 4. Limpiar ID de éxito y recargar datos (saldos, etc)
-                  setSuccessIds(prev => {
-                      const next = new Set(prev);
-                      next.delete(id);
-                      return next;
-                  });
-                  loadParentData();
-              }, 1500);
+                  loadParentData(); // Recarga real para actualizar saldos del padre/hijo
+              }, 2000);
           } else {
               alert("Error: " + (result?.error || "No se pudo procesar"));
               setProcessingId(null);
@@ -131,10 +132,11 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   };
 
   const handleRejectExpense = async (id: string) => {
-      if (processingId || successIds.has(id)) return;
+      if (processingId) return;
       setProcessingId(id);
       try {
           await supabaseService.rejectExpense(id);
+          soundService.playPop();
           setPendingExpenses(prev => prev.filter(e => e.id !== id));
           setProcessingId(null);
           loadParentData();
@@ -189,6 +191,36 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
 
   return (
     <div className="animate-fade-in pb-10">
+      {/* MODAL DE CONFIRMACIÓN DE GASTO */}
+      {confirmingRequest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl border-4 border-white text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
+                <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100">
+                    <HelpCircle size={48} strokeWidth={2.5} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2">¿Aprobar Gasto?</h3>
+                <p className="text-slate-500 font-bold text-sm mb-6">
+                    Se descontarán <span className="text-rose-500">{confirmingRequest.amount} MiniBits</span> de la cuenta de <b>{confirmingRequest.studentName}</b>.
+                </p>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => setConfirmingRequest(null)}
+                        className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-colors"
+                    >
+                        No, volver
+                    </button>
+                    <button 
+                        onClick={executeApproval}
+                        className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all"
+                    >
+                        ¡SÍ, APROBAR!
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
          <h2 className="text-2xl font-black text-slate-800">Panel de Padres</h2>
          <div className="flex gap-2">
@@ -214,21 +246,21 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       {pendingExpenses.length > 0 && (
           <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-fade-in shadow-md">
               <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2 uppercase tracking-tight">
-                  <AlertTriangle className="text-rose-500" size={20} /> Solicitudes Pendientes
+                  <AlertTriangle className="text-rose-500" size={20} /> Solicitudes por Autorizar
               </h3>
               <div className="grid gap-4 md:grid-cols-2">
                   {pendingExpenses.map(req => {
                       const isProcessing = processingId === req.id;
-                      const isSuccess = successIds.has(req.id);
+                      const isSuccess = successId === req.id;
 
                       return (
-                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${isSuccess ? 'border-emerald-500 bg-emerald-50 scale-95 opacity-50' : 'border-rose-100'}`}>
+                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${isSuccess ? 'border-emerald-500 bg-emerald-50' : 'border-rose-100'}`}>
                             
-                            {/* OVERLAY DE ÉXITO DEFINITIVO */}
+                            {/* OVERLAY DE ÉXITO */}
                             {isSuccess && (
                                 <div className="absolute inset-0 z-30 bg-emerald-500 flex flex-col items-center justify-center text-white animate-fade-in">
                                     <CheckCircle2 size={40} className="animate-bounce" />
-                                    <span className="font-black text-sm mt-1 uppercase tracking-widest">¡APROBADO CON ÉXITO!</span>
+                                    <span className="font-black text-sm mt-1 uppercase tracking-widest">¡GASTO APROBADO!</span>
                                 </div>
                             )}
 
@@ -238,7 +270,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 </div>
                                 <div className="max-w-[140px]">
                                     <p className="font-black text-slate-800 text-sm truncate">{req.studentName}</p>
-                                    <p className="text-slate-500 text-xs font-bold truncate">Desea: <span className="text-slate-700">{req.description}</span></p>
+                                    <p className="text-slate-500 text-[10px] font-bold truncate">Desea: <span className="text-slate-700">{req.description}</span></p>
                                     <div className="flex gap-1 mt-1">
                                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${req.category === 'NEED' ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-pink-100 text-pink-600 border-pink-200'}`}>
                                             {req.category === 'NEED' ? 'NECESIDAD' : 'CAPRICHO'}
@@ -252,8 +284,9 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 <div className="flex flex-col gap-1.5">
                                     <button 
                                         disabled={!!processingId || isSuccess}
-                                        onClick={() => handleApproveExpense(req.id)} 
+                                        onClick={() => handleApproveClick(req)} 
                                         className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-100 border-slate-200' : 'bg-emerald-500 border-emerald-700 text-white hover:bg-emerald-600 active:translate-y-1 active:border-b-0'}`}
+                                        title="Aprobar"
                                     >
                                         {isProcessing ? <Loader2 size={18} className="animate-spin text-slate-400" /> : <Check size={18} strokeWidth={4}/>}
                                     </button>
@@ -261,6 +294,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                         disabled={!!processingId || isSuccess}
                                         onClick={() => handleRejectExpense(req.id)} 
                                         className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-50 border-slate-100' : 'bg-slate-200 border-slate-400 text-slate-500 hover:bg-slate-300 active:translate-y-1 active:border-b-0'}`}
+                                        title="Rechazar"
                                     >
                                         <X size={18} strokeWidth={4}/>
                                     </button>
