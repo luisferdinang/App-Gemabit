@@ -17,7 +17,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [isLinking, setIsLinking] = useState(false);
   const [linkCode, setLinkCode] = useState('');
   
-  // States for stability and feedback
+  // Refresh and Approval States
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
@@ -31,17 +31,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentWeekId());
 
-  // Initial Load & Subscriptions
+  // 1. Carga inicial y suscripciones en tiempo real
   useEffect(() => {
     loadParentData();
     
     const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => { loadParentData(); });
+    
+    // Escuchamos cambios en solicitudes de gasto
     const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => { 
-        // Solo recargamos si no estamos mostrando un mensaje de éxito para evitar que la lista salte
-        if (!successId && !processingId) {
+        // Solo recargamos si no hay un proceso crítico de UI ocurriendo
+        if (!successId && !processingId && !confirmingRequest) {
             loadParentData(); 
         }
     });
+
     const subTransactions = supabaseService.subscribeToChanges('transactions', undefined, () => {
         if (selectedChild) loadChildHistory(selectedChild);
     });
@@ -51,7 +54,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         subExpenses.unsubscribe();
         subTransactions.unsubscribe();
     };
-  }, [currentUser.uid, selectedChild, processingId, successId]);
+  }, [currentUser.uid, selectedChild, processingId, successId, confirmingRequest]);
 
   useEffect(() => {
       if (selectedChild) {
@@ -75,7 +78,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       }
       
       const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
-      // Filtro local preventivo: no mostrar los que acabamos de aprobar aunque la DB aún no se refresque
+      // SEGURIDAD: Nunca mostramos una que acabamos de aprobar exitosamente
       setPendingExpenses(expenses.filter(e => e.id !== successId));
     }
   };
@@ -95,38 +98,41 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       setAvailableWeeks(weeks);
   };
 
+  // --- FLUJO DE APROBACIÓN MEJORADO ---
+
   const handleApproveClick = (req: ExpenseRequest) => {
-      setConfirmingRequest(req);
+      setConfirmingRequest(req); // Abre el modal de "¿Estás seguro?"
   };
 
   const executeApproval = async () => {
       if (!confirmingRequest || processingId) return;
       
-      const id = confirmingRequest.id;
-      setProcessingId(id);
-      setConfirmingRequest(null);
+      const targetId = confirmingRequest.id;
+      setProcessingId(targetId);
+      setConfirmingRequest(null); // Cerramos el modal de pregunta
 
       try {
-          const result = await supabaseService.approveExpense(id);
+          const result = await supabaseService.approveExpense(targetId);
           if (result && result.success) {
               soundService.playSuccess();
-              setSuccessId(id); // Mostrar overlay de éxito
+              setSuccessId(targetId); // Disparamos el cartel de "¡APROBADO!"
               
-              // 1. Quitarlo de la lista local inmediatamente para que el padre vea que se fue
-              setPendingExpenses(prev => prev.filter(e => e.id !== id));
+              // Eliminación optimista inmediata del estado local para que desaparezca YA
+              setPendingExpenses(prev => prev.filter(e => e.id !== targetId));
 
-              // 2. Esperar un poco para el feedback visual
+              // Esperamos 2 segundos para que el padre vea el feedback y luego limpiamos todo
               setTimeout(() => {
                   setSuccessId(null);
                   setProcessingId(null);
-                  loadParentData(); // Recarga real para actualizar saldos del padre/hijo
-              }, 2000);
+                  loadParentData(); // Recarga real para actualizar saldos de la barra lateral
+              }, 2500);
           } else {
               alert("Error: " + (result?.error || "No se pudo procesar"));
               setProcessingId(null);
           }
       } catch (e) {
-          alert("Error de conexión");
+          console.error(e);
+          alert("Error de conexión. Inténtalo de nuevo.");
           setProcessingId(null);
       }
   };
@@ -191,30 +197,31 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
 
   return (
     <div className="animate-fade-in pb-10">
-      {/* MODAL DE CONFIRMACIÓN DE GASTO */}
+      
+      {/* MODAL DE PREGUNTA: "¿ESTÁS SEGURO?" */}
       {confirmingRequest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
             <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl border-4 border-white text-center relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
-                <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100">
+                <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100 shadow-inner">
                     <HelpCircle size={48} strokeWidth={2.5} />
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 mb-2">¿Aprobar Gasto?</h3>
-                <p className="text-slate-500 font-bold text-sm mb-6">
-                    Se descontarán <span className="text-rose-500">{confirmingRequest.amount} MiniBits</span> de la cuenta de <b>{confirmingRequest.studentName}</b>.
+                <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed px-2">
+                    ¿Confirmas que <b>{confirmingRequest.studentName}</b> puede usar <span className="text-rose-500 font-black">{confirmingRequest.amount} MiniBits</span> para su compra?
                 </p>
                 <div className="flex gap-3">
                     <button 
                         onClick={() => setConfirmingRequest(null)}
-                        className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-colors"
+                        className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
                     >
-                        No, volver
+                        No, cancelar
                     </button>
                     <button 
                         onClick={executeApproval}
                         className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all"
                     >
-                        ¡SÍ, APROBAR!
+                        SÍ, APROBAR
                     </button>
                 </div>
             </div>
@@ -254,18 +261,18 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                       const isSuccess = successId === req.id;
 
                       return (
-                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${isSuccess ? 'border-emerald-500 bg-emerald-50' : 'border-rose-100'}`}>
+                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${isSuccess ? 'border-emerald-500 bg-emerald-50 scale-95 opacity-50' : 'border-rose-100'}`}>
                             
-                            {/* OVERLAY DE ÉXITO */}
+                            {/* OVERLAY DE CONFIRMACIÓN FINAL (¡APROBADO!) */}
                             {isSuccess && (
                                 <div className="absolute inset-0 z-30 bg-emerald-500 flex flex-col items-center justify-center text-white animate-fade-in">
-                                    <CheckCircle2 size={40} className="animate-bounce" />
-                                    <span className="font-black text-sm mt-1 uppercase tracking-widest">¡GASTO APROBADO!</span>
+                                    <CheckCircle2 size={44} className="animate-bounce" />
+                                    <span className="font-black text-base mt-2 uppercase tracking-widest shadow-sm">¡GASTO APROBADO!</span>
                                 </div>
                             )}
 
                             <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border-2 border-slate-50">
+                                <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border-2 border-slate-50 shadow-sm">
                                     <img src={req.studentAvatar} className="w-full h-full object-cover" alt="Avatar" />
                                 </div>
                                 <div className="max-w-[140px]">
@@ -283,20 +290,20 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
                                 <div className="flex flex-col gap-1.5">
                                     <button 
-                                        disabled={!!processingId || isSuccess}
+                                        disabled={!!processingId || !!successId}
                                         onClick={() => handleApproveClick(req)} 
-                                        className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-100 border-slate-200' : 'bg-emerald-500 border-emerald-700 text-white hover:bg-emerald-600 active:translate-y-1 active:border-b-0'}`}
+                                        className={`p-2.5 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-100 border-slate-200' : 'bg-emerald-500 border-emerald-700 text-white hover:bg-emerald-600 active:translate-y-1 active:border-b-0'}`}
                                         title="Aprobar"
                                     >
-                                        {isProcessing ? <Loader2 size={18} className="animate-spin text-slate-400" /> : <Check size={18} strokeWidth={4}/>}
+                                        {isProcessing ? <Loader2 size={18} className="animate-spin text-slate-400" /> : <Check size={20} strokeWidth={4}/>}
                                     </button>
                                     <button 
-                                        disabled={!!processingId || isSuccess}
+                                        disabled={!!processingId || !!successId}
                                         onClick={() => handleRejectExpense(req.id)} 
-                                        className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-50 border-slate-100' : 'bg-slate-200 border-slate-400 text-slate-500 hover:bg-slate-300 active:translate-y-1 active:border-b-0'}`}
+                                        className={`p-2.5 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-50 border-slate-100' : 'bg-slate-200 border-slate-400 text-slate-500 hover:bg-slate-300 active:translate-y-1 active:border-b-0'}`}
                                         title="Rechazar"
                                     >
-                                        <X size={18} strokeWidth={4}/>
+                                        <X size={20} strokeWidth={4}/>
                                     </button>
                                 </div>
                             </div>
