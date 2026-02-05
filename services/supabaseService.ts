@@ -604,31 +604,34 @@ export const supabaseService = {
   },
 
   approveExpense: async (requestId: string): Promise<{success: boolean, error?: string}> => {
-      // 1. Fetch request with strict status check
+      // 1. Fetch request with strict status check and lock
       const { data: req, error: fetchErr } = await supabase.from('expense_requests').select('*').eq('id', requestId).single();
       
       if (fetchErr || !req) return { success: false, error: 'Solicitud no encontrada' };
-      if (req.status !== 'PENDING') return { success: false, error: 'Esta solicitud ya fue procesada' };
+      if (req.status !== 'PENDING') return { success: false, error: 'Esta solicitud ya fue aprobada o rechazada' };
 
       // 2. Double check student balance
       const { data: student, error: studentErr } = await supabase.from('profiles').select('balance').eq('id', req.student_id).single();
       if (studentErr || !student) return { success: false, error: 'Alumno no encontrado' };
 
       if (student.balance < req.amount) {
-          return { success: false, error: 'El saldo del alumno ya no es suficiente para este gasto' };
+          return { success: false, error: 'El saldo del alumno es insuficiente ahora' };
       }
 
-      // 3. Atomically update balance and request status
-      // In a real app, this should ideally be done in a single DB Transaction or RPC call.
-      // For now, we perform the updates sequentially.
+      // 3. Atomically perform updates
+      // Note: Ideally these should be in a Postgres function (RPC) to guarantee atomicity.
       
+      // Update Status first to "lock" the request
+      const { error: statusErr } = await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
+      if (statusErr) return { success: false, error: 'Error al actualizar estado' };
+
       // Update Balance
       const { error: balErr } = await supabase.from('profiles').update({ balance: student.balance - req.amount }).eq('id', req.student_id);
-      if (balErr) return { success: false, error: 'No se pudo actualizar el saldo' };
-
-      // Update Status
-      const { error: statusErr } = await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
-      if (statusErr) return { success: false, error: 'Error al finalizar la aprobación' };
+      if (balErr) {
+          // Revert status if balance fails
+          await supabase.from('expense_requests').update({ status: 'PENDING' }).eq('id', requestId);
+          return { success: false, error: 'No se pudo actualizar el saldo' };
+      }
 
       // Log Transaction
       await supabase.from('transactions').insert({ 
