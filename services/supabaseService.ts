@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole, ExpenseRequest, SavingsGoal, ExpenseCategory } from '../types';
 
@@ -38,7 +39,6 @@ const TASK_NAMES: Record<string, string> = {
 export const supabaseService = {
   
   // REALTIME SUBSCRIPTION HELPER
-  // Changed callback signature to accept payload
   subscribeToChanges: (table: string, filter: string | undefined, callback: (payload?: any) => void) => {
     const channel = supabase
       .channel(`public:${table}${filter ? ':' + filter : ''}`)
@@ -105,7 +105,6 @@ export const supabaseService = {
 
     if (!profile) return { error: 'Perfil no encontrado' };
     
-    // Check for archived users
     if (profile.status === 'DELETED' || profile.status === 'DELETED_ARCHIVE') return { error: 'Esta cuenta ha sido eliminada.' };
     if (profile.status === 'PENDING') return { error: 'Cuenta pendiente de aprobación.' };
 
@@ -122,7 +121,6 @@ export const supabaseService = {
     return { success: true };
   },
 
-  // ADMIN ACTION: Reset Student Password
   adminResetStudentPassword: async (studentId: string, newPassword: string): Promise<{success: boolean, error?: string}> => {
     const { data, error } = await supabase.rpc('reset_user_password', {
       user_id: studentId,
@@ -133,23 +131,18 @@ export const supabaseService = {
     return { success: true };
   },
 
-  // SYSTEM RESET (FACTORY RESET)
   resetSystemData: async (adminUid: string): Promise<{success: boolean, error?: string}> => {
     try {
         const zeroUuid = '00000000-0000-0000-0000-000000000000';
 
-        // 1. Delete all relational data first
         await supabase.from('transactions').delete().neq('id', zeroUuid);
         await supabase.from('tasks').delete().neq('id', zeroUuid);
         await supabase.from('quiz_results').delete().neq('id', zeroUuid);
         await supabase.from('expense_requests').delete().neq('id', zeroUuid);
         await supabase.from('savings_goals').delete().neq('id', zeroUuid);
         
-        // 2. Delete teacher created quizzes
         await supabase.from('quizzes').delete().eq('created_by', 'TEACHER');
 
-        // 3. Delete all users EXCEPT the admin AND other teachers
-        // Preserve self (adminUid) AND anyone with role 'MAESTRA'
         const { error: profileError } = await supabase
             .from('profiles')
             .delete()
@@ -184,7 +177,6 @@ export const supabaseService = {
 
     const linkCode = userData.role === 'ALUMNO' ? Math.floor(100000 + Math.random() * 900000).toString() : null;
 
-    // Use 3D Objects for Parents, Robots for Students (CDN Fixed)
     const isStudent = userData.role === 'ALUMNO';
     const defaultAvatar = isStudent 
         ? `https://api.dicebear.com/9.x/bottts/svg?seed=${userData.username}`
@@ -216,9 +208,7 @@ export const supabaseService = {
     return { success: true };
   },
 
-  // USER MANAGEMENT
   getStudents: async (): Promise<User[]> => {
-    // FILTER OUT DELETED
     const { data } = await supabase
         .from('profiles')
         .select('*')
@@ -250,24 +240,21 @@ export const supabaseService = {
   },
 
   rejectUser: async (uid: string) => {
-    // Rejection is effectively a delete/archive
     await supabase.from('profiles').update({ status: 'DELETED' }).eq('id', uid);
   },
 
   deleteStudent: async (uid: string): Promise<{success: boolean, error?: string}> => {
      try {
-       const { error: tErr } = await supabase.from('tasks').delete().eq('student_id', uid);
-       const { error: trErr } = await supabase.from('transactions').delete().eq('student_id', uid);
-       const { error: qErr } = await supabase.from('quiz_results').delete().eq('student_id', uid);
-       const { error: eErr } = await supabase.from('expense_requests').delete().eq('student_id', uid);
-       const { error: sErr } = await supabase.from('savings_goals').delete().eq('student_id', uid);
+       await supabase.from('tasks').delete().eq('student_id', uid);
+       await supabase.from('transactions').delete().eq('student_id', uid);
+       await supabase.from('quiz_results').delete().eq('student_id', uid);
+       await supabase.from('expense_requests').delete().eq('student_id', uid);
+       await supabase.from('savings_goals').delete().eq('student_id', uid);
        
        const { error: hardError } = await supabase.from('profiles').delete().eq('id', uid);
-       
        if (!hardError) return { success: true };
 
        const { error: softError } = await supabase.from('profiles').update({ status: 'DELETED' }).eq('id', uid);
-
        if (softError) return { success: false, error: softError.message };
        return { success: true };
      } catch (e: any) {
@@ -300,7 +287,6 @@ export const supabaseService = {
     return mapProfileToUser(student);
   },
 
-  // TASK MANAGEMENT
   getTasks: async (studentId: string, weekId: string = getCurrentWeekId()): Promise<TaskLog[]> => {
     let { data } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId);
     
@@ -315,7 +301,6 @@ export const supabaseService = {
       data = newTasks;
     }
 
-    // DEDUPLICATE
     const uniqueTasksMap = new Map<string, any>();
     (data || []).forEach(t => {
        if (!uniqueTasksMap.has(t.type)) {
@@ -355,21 +340,17 @@ export const supabaseService = {
 
   updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()) => {
     const { data: tasks } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId).eq('type', type);
-    // Take the first one if duplicate exists
     const task = tasks?.[0];
     
     if (task) {
-       // IMPORTANT: Check if value is actually changing to prevent double assignment
        if (task.status[key] === value) return false;
 
        const newStatus = { ...task.status, [key]: value };
        await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
        
-       // Reward logic: School 20, Home 25
        const reward = type === 'SCHOOL' ? 20 : 25;
        const change = value ? reward : -reward;
        
-       // TRANSLATE KEY
        const label = TASK_NAMES[key] || key;
 
        const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
@@ -400,7 +381,6 @@ export const supabaseService = {
     });
   },
 
-  // TRANSACTION HISTORY
   getTransactions: async (studentId: string): Promise<Transaction[]> => {
       const { data } = await supabase
         .from('transactions')
@@ -418,10 +398,7 @@ export const supabaseService = {
       }));
   },
 
-  // QUIZ MANAGEMENT
   createTeacherQuiz: async (quiz: any): Promise<{success: boolean, error?: string}> => {
-    // FIX: Remove 'answer' column insert.
-    // The secret word is now stored in 'options[0]' to bypass the missing schema column.
     const { error } = await supabase.from('quizzes').insert({ 
         type: quiz.type, 
         question: quiz.question, 
@@ -432,8 +409,7 @@ export const supabaseService = {
         reward: quiz.reward, 
         difficulty: quiz.difficulty, 
         assigned_to: quiz.assigned_to || quiz.assignedTo, 
-        created_by: 'TEACHER',
-        // answer: quiz.answer // DO NOT UNCOMMENT UNTIL SCHEMA IS UPDATED
+        created_by: 'TEACHER'
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
@@ -452,7 +428,6 @@ export const supabaseService = {
 
   deleteQuiz: async (quizId: string): Promise<{success: boolean, error?: string}> => {
     try {
-        // HARD DELETE: Remove the row completely
         const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
         if (error) return { success: false, error: error.message };
         return { success: true };
@@ -491,7 +466,6 @@ export const supabaseService = {
   },
 
   submitQuiz: async (studentId: string, quizId: string, question: string, score: number, earned: number) => {
-    // Save as IN_BAG (Completed but not sent to teacher yet)
     await supabase.from('quiz_results').insert({ 
       student_id: studentId, 
       quiz_id: quizId, 
@@ -504,7 +478,6 @@ export const supabaseService = {
   },
 
   cashOutArcade: async (studentId: string): Promise<{success: boolean, count: number}> => {
-     // Move all IN_BAG items to PENDING
      const { data, error } = await supabase
         .from('quiz_results')
         .update({ status: 'PENDING' })
@@ -531,7 +504,7 @@ export const supabaseService = {
 
   approveQuizRedemption: async (resultId: string) => {
      const { data: result } = await supabase.from('quiz_results').select('*').eq('id', resultId).single();
-     if (!result) return;
+     if (!result || result.status !== 'PENDING') return;
      await supabase.from('quiz_results').update({ status: 'APPROVED' }).eq('id', resultId);
      const { data: student } = await supabase.from('profiles').select('balance').eq('id', result.student_id).single();
      if (student) {
@@ -544,10 +517,7 @@ export const supabaseService = {
     await supabase.from('quiz_results').update({ status: 'REJECTED' }).eq('id', resultId);
   },
 
-  // --- EXPENSE REQUESTS (GASTOS) ---
-  
   requestExpense: async (studentId: string, amount: number, description: string, category: ExpenseCategory): Promise<{success: boolean, error?: string}> => {
-      // Validate balance locally first
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
       if (!student || student.balance < amount) return { success: false, error: 'No tienes suficientes MiniBits.' };
 
@@ -583,13 +553,12 @@ export const supabaseService = {
       }));
   },
 
-  // NEW: Get all expenses for report
   getAllClassExpenses: async (): Promise<ExpenseRequest[]> => {
     const { data } = await supabase
       .from('expense_requests')
       .select('*, profiles(display_name, avatar_url)')
       .order('created_at', { ascending: false })
-      .limit(50); // Limit to last 50 for performance
+      .limit(50);
 
     return (data || []).map((r: any) => ({
         id: r.id,
@@ -634,20 +603,34 @@ export const supabaseService = {
       }));
   },
 
-  approveExpense: async (requestId: string) => {
-      const { data: req } = await supabase.from('expense_requests').select('*').eq('id', requestId).single();
-      if (!req) return;
+  approveExpense: async (requestId: string): Promise<{success: boolean, error?: string}> => {
+      // 1. Fetch request with strict status check
+      const { data: req, error: fetchErr } = await supabase.from('expense_requests').select('*').eq('id', requestId).single();
+      
+      if (fetchErr || !req) return { success: false, error: 'Solicitud no encontrada' };
+      if (req.status !== 'PENDING') return { success: false, error: 'Esta solicitud ya fue procesada' };
 
-      const { data: student } = await supabase.from('profiles').select('balance').eq('id', req.student_id).single();
-      if (!student) return;
+      // 2. Double check student balance
+      const { data: student, error: studentErr } = await supabase.from('profiles').select('balance').eq('id', req.student_id).single();
+      if (studentErr || !student) return { success: false, error: 'Alumno no encontrado' };
 
       if (student.balance < req.amount) {
-          // Can't approve if balance too low now
-          return { success: false, error: 'El saldo del alumno es insuficiente ahora.' };
+          return { success: false, error: 'El saldo del alumno ya no es suficiente para este gasto' };
       }
 
-      // Perform transaction
-      await supabase.from('profiles').update({ balance: student.balance - req.amount }).eq('id', req.student_id);
+      // 3. Atomically update balance and request status
+      // In a real app, this should ideally be done in a single DB Transaction or RPC call.
+      // For now, we perform the updates sequentially.
+      
+      // Update Balance
+      const { error: balErr } = await supabase.from('profiles').update({ balance: student.balance - req.amount }).eq('id', req.student_id);
+      if (balErr) return { success: false, error: 'No se pudo actualizar el saldo' };
+
+      // Update Status
+      const { error: statusErr } = await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
+      if (statusErr) return { success: false, error: 'Error al finalizar la aprobación' };
+
+      // Log Transaction
       await supabase.from('transactions').insert({ 
           student_id: req.student_id, 
           amount: -req.amount, 
@@ -656,7 +639,6 @@ export const supabaseService = {
           timestamp: Date.now() 
       });
       
-      await supabase.from('expense_requests').update({ status: 'APPROVED' }).eq('id', requestId);
       return { success: true };
   },
 
@@ -664,8 +646,6 @@ export const supabaseService = {
       await supabase.from('expense_requests').update({ status: 'REJECTED' }).eq('id', requestId);
       return { success: true };
   },
-
-  // --- SAVINGS GOALS (METAS) ---
 
   createSavingsGoal: async (studentId: string, title: string, targetAmount: number): Promise<{success: boolean, error?: string}> => {
       const { error } = await supabase.from('savings_goals').insert({
@@ -701,21 +681,15 @@ export const supabaseService = {
   },
 
   depositToGoal: async (goalId: string, amount: number) => {
-      // 1. Get Goal
       const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
       if (!goal) return { success: false, error: 'Meta no encontrada' };
 
-      // 2. Get Student Balance
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
       if (!student || student.balance < amount) return { success: false, error: 'Saldo insuficiente' };
 
-      // 3. Transactions (Move money)
-      // Decrease Balance
       await supabase.from('profiles').update({ balance: student.balance - amount }).eq('id', goal.student_id);
-      // Increase Goal
       await supabase.from('savings_goals').update({ current_amount: goal.current_amount + amount }).eq('id', goalId);
       
-      // LOG TRANSACTION (SPEND from Wallet)
       await supabase.from('transactions').insert({ 
           student_id: goal.student_id, 
           amount: -amount, 
@@ -728,22 +702,16 @@ export const supabaseService = {
   },
 
   withdrawFromGoal: async (goalId: string, amount: number) => {
-      // 1. Get Goal
       const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
       if (!goal) return { success: false, error: 'Meta no encontrada' };
       if (goal.current_amount < amount) return { success: false, error: 'Fondos insuficientes en la meta' };
 
-      // 2. Get Student
       const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
       if (!student) return { success: false, error: 'Error de usuario' };
 
-      // 3. Transactions
-      // Increase Balance
       await supabase.from('profiles').update({ balance: student.balance + amount }).eq('id', goal.student_id);
-      // Decrease Goal
       await supabase.from('savings_goals').update({ current_amount: goal.current_amount - amount }).eq('id', goalId);
 
-      // LOG TRANSACTION (EARN back to Wallet)
       await supabase.from('transactions').insert({ 
           student_id: goal.student_id, 
           amount: amount, 
@@ -756,8 +724,6 @@ export const supabaseService = {
   },
 
   deleteGoal: async (goalId: string) => {
-      // Should probably return funds to balance first, but for simplicity we assume empty or deleted with funds
-      // Ideally trigger a withdraw of all funds first.
       const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
       if (goal && goal.current_amount > 0) {
           await supabaseService.withdrawFromGoal(goalId, goal.current_amount);
@@ -766,14 +732,12 @@ export const supabaseService = {
       return { success: true };
   },
 
-  // --- SUPER GEMABIT EXCHANGE ---
   exchangeSuperGemabit: async (studentId: string): Promise<{success: boolean, error?: string}> => {
       const { data: student } = await supabase.from('profiles').select('streak_weeks, balance').eq('id', studentId).single();
       
       if (!student) return { success: false, error: 'Estudiante no encontrado' };
       if (student.streak_weeks < 4) return { success: false, error: 'Aún no completas las 4 semanas.' };
 
-      // Exchange: +500 MB (5 GB), -4 Weeks Streak
       const reward = 500;
       await supabase.from('profiles').update({ 
           balance: student.balance + reward,

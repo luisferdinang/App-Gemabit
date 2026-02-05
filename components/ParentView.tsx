@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
-import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw } from 'lucide-react';
+import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { getWeekDateRange } from '../utils/dateUtils';
 import { soundService } from '../services/soundService';
 
@@ -23,6 +23,10 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
   const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
+  
+  // New States for Stability and Feedback
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [approvalFeedback, setApprovalFeedback] = useState<{id: string, message: string} | null>(null);
 
   // Week Navigation State
   const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
@@ -38,7 +42,6 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     const subTransactions = supabaseService.subscribeToChanges('transactions', undefined, () => {
         if (selectedChild) loadChildHistory(selectedChild);
     });
-    // Escuchar tareas para actualizar historial de semanas
     const subTasks = supabaseService.subscribeToChanges('tasks', undefined, () => {
         if (selectedChild) loadChildWeeks(selectedChild);
     });
@@ -52,12 +55,11 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     };
   }, [currentUser.uid]);
 
-  // 2. Efecto para cargar historial y semanas cuando cambia el niño
   useEffect(() => {
       if (selectedChild) {
           loadChildHistory(selectedChild);
           loadChildWeeks(selectedChild);
-          setSelectedWeek(getCurrentWeekId()); // Reset to current week on child switch
+          setSelectedWeek(getCurrentWeekId());
       } else {
           setChildTransactions([]);
           setAvailableWeeks([]);
@@ -103,12 +105,10 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
 
   const loadChildWeeks = async (childId: string) => {
       const weeks = await supabaseService.getStudentWeeks(childId);
-      // Asegurar que la semana actual esté en la lista aunque no tenga tareas
       const current = getCurrentWeekId();
       if (!weeks.find(w => w.weekId === current)) {
           weeks.push({ weekId: current, completion: 0 });
       }
-      // Ordenar descendente (más reciente primero)
       weeks.sort((a, b) => b.weekId.localeCompare(a.weekId));
       setAvailableWeeks(weeks);
   };
@@ -134,12 +134,44 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   };
 
   const handleApproveExpense = async (id: string) => {
-      const result = await supabaseService.approveExpense(id);
-      if (result && !result.success) alert("Error: " + result.error);
+      if (processingId) return; // Prevent double trigger
+      
+      setProcessingId(id);
+      try {
+          const result = await supabaseService.approveExpense(id);
+          if (result && result.success) {
+              soundService.playSuccess();
+              setApprovalFeedback({ id, message: '¡Gasto Aprobado!' });
+              // Small delay to show feedback before the item disappears from list due to state sync
+              setTimeout(() => {
+                  setApprovalFeedback(null);
+                  loadParentData();
+              }, 2000);
+          } else {
+              alert("Error: " + (result?.error || "No se pudo aprobar el gasto"));
+          }
+      } catch (e) {
+          alert("Error de conexión");
+      } finally {
+          setProcessingId(null);
+      }
   };
 
   const handleRejectExpense = async (id: string) => {
-      await supabaseService.rejectExpense(id);
+      if (processingId) return;
+      setProcessingId(id);
+      try {
+          await supabaseService.rejectExpense(id);
+          setApprovalFeedback({ id, message: 'Solicitud Rechazada' });
+          setTimeout(() => {
+              setApprovalFeedback(null);
+              loadParentData();
+          }, 2000);
+      } catch (e) {
+          alert("Error al rechazar");
+      } finally {
+          setProcessingId(null);
+      }
   };
 
   const activeKid = children.find(c => c.uid === selectedChild);
@@ -147,7 +179,6 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const miniBitCount = activeKid ? activeKid.balance % 100 : 0;
   const isPastWeek = selectedWeek !== getCurrentWeekId();
 
-  // --- VISUAL HELPERS ---
   const getTransactionVisuals = (t: Transaction) => {
       const desc = t.description.toUpperCase();
       const isEarn = t.type === 'EARN';
@@ -217,33 +248,61 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       
       {/* PENDING EXPENSE ALERT */}
       {pendingExpenses.length > 0 && (
-          <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-pulse-slow">
+          <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-fade-in">
               <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2">
                   <AlertTriangle className="text-rose-500" /> Solicitudes de Gasto Pendientes
               </h3>
               <div className="grid gap-4 md:grid-cols-2">
-                  {pendingExpenses.map(req => (
-                      <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border border-rose-100">
-                          <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border-2 border-rose-50">
-                                  <img src={req.studentAvatar} className="w-full h-full object-cover"/>
-                              </div>
-                              <div>
-                                  <p className="font-black text-slate-800 text-sm">{req.studentName}</p>
-                                  <p className="text-slate-500 text-xs font-bold">Desea: <span className="text-slate-700">{req.description}</span></p>
-                                  {req.category === 'NEED' && <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full mt-1 inline-block">NECESIDAD</span>}
-                                  {req.category === 'WANT' && <span className="text-[9px] font-black bg-pink-100 text-pink-600 px-2 py-0.5 rounded-full mt-1 inline-block">CAPRICHO</span>}
-                              </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
-                              <div className="flex flex-col gap-1">
-                                  <button onClick={() => handleApproveExpense(req.id)} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-sm"><Check size={16}/></button>
-                                  <button onClick={() => handleRejectExpense(req.id)} className="p-2 bg-slate-200 text-slate-500 rounded-lg hover:bg-slate-300 shadow-sm"><X size={16}/></button>
-                              </div>
-                          </div>
-                      </div>
-                  ))}
+                  {pendingExpenses.map(req => {
+                      const isThisProcessing = processingId === req.id;
+                      const hasFeedback = approvalFeedback?.id === req.id;
+
+                      return (
+                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${hasFeedback ? 'border-emerald-500 bg-emerald-50' : 'border-rose-100'}`}>
+                            {hasFeedback && (
+                                <div className="absolute inset-0 bg-emerald-500/90 flex flex-col items-center justify-center text-white z-20 animate-fade-in">
+                                    <CheckCircle2 size={32} className="mb-1 animate-bounce" />
+                                    <span className="font-black text-xs uppercase tracking-widest">{approvalFeedback.message}</span>
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border-2 border-rose-50">
+                                    <img src={req.studentAvatar} className="w-full h-full object-cover" />
+                                </div>
+                                <div>
+                                    <p className="font-black text-slate-800 text-sm">{req.studentName}</p>
+                                    <p className="text-slate-500 text-xs font-bold truncate max-w-[120px]">
+                                        Desea: <span className="text-slate-700">{req.description}</span>
+                                    </p>
+                                    <div className="flex gap-1 mt-1">
+                                        {req.category === 'NEED' && <span className="text-[8px] font-black bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">NECESIDAD</span>}
+                                        {req.category === 'WANT' && <span className="text-[8px] font-black bg-pink-100 text-pink-600 px-1.5 py-0.5 rounded-full">CAPRICHO</span>}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
+                                <div className="flex flex-col gap-1">
+                                    <button 
+                                        disabled={isThisProcessing || !!processingId}
+                                        onClick={() => handleApproveExpense(req.id)} 
+                                        className={`p-2 rounded-lg shadow-sm transition-all ${isThisProcessing ? 'bg-slate-100 text-slate-400' : 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'}`}
+                                    >
+                                        {isThisProcessing ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} strokeWidth={3}/>}
+                                    </button>
+                                    <button 
+                                        disabled={isThisProcessing || !!processingId}
+                                        onClick={() => handleRejectExpense(req.id)} 
+                                        className={`p-2 rounded-lg shadow-sm transition-all ${isThisProcessing ? 'bg-slate-100 text-slate-400' : 'bg-slate-200 text-slate-500 hover:bg-slate-300 active:scale-95'}`}
+                                    >
+                                        <X size={16} strokeWidth={3}/>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                      );
+                  })}
               </div>
           </div>
       )}
