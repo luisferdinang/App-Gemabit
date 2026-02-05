@@ -17,10 +17,10 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [isLinking, setIsLinking] = useState(false);
   const [linkCode, setLinkCode] = useState('');
   
-  // Refresh States
+  // States for stability and feedback
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [feedbackId, setFeedbackId] = useState<{id: string, type: 'SUCCESS' | 'ERROR', msg: string} | null>(null);
+  const [successIds, setSuccessIds] = useState<Set<string>>(new Set());
   
   // Expenses & Transactions State
   const [pendingExpenses, setPendingExpenses] = useState<ExpenseRequest[]>([]);
@@ -30,15 +30,16 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const [availableWeeks, setAvailableWeeks] = useState<{weekId: string, completion: number}[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentWeekId());
 
-  // 1. Carga inicial y suscripciones
+  // Initial Load & Subscriptions
   useEffect(() => {
     loadParentData();
     
-    // Suscripciones para mantener todo sincronizado
     const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => { loadParentData(); });
     const subExpenses = supabaseService.subscribeToChanges('expense_requests', undefined, () => { 
-        // Solo recargamos si no estamos procesando uno nosotros mismos para evitar parpadeos
-        if (!processingId) loadParentData(); 
+        // Solo recargamos si no hay una operación de éxito en curso para evitar saltos en la lista
+        if (successIds.size === 0 && !processingId) {
+            loadParentData(); 
+        }
     });
     const subTransactions = supabaseService.subscribeToChanges('transactions', undefined, () => {
         if (selectedChild) loadChildHistory(selectedChild);
@@ -49,7 +50,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         subExpenses.unsubscribe();
         subTransactions.unsubscribe();
     };
-  }, [currentUser.uid, selectedChild, processingId]);
+  }, [currentUser.uid, selectedChild, processingId, successIds]);
 
   useEffect(() => {
       if (selectedChild) {
@@ -73,7 +74,8 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       }
       
       const expenses = await supabaseService.getPendingExpensesForParent(myKids.map(k => k.uid));
-      setPendingExpenses(expenses);
+      // Solo mantenemos en el estado las que no acabamos de aprobar exitosamente
+      setPendingExpenses(expenses.filter(e => !successIds.has(e.id)));
     }
   };
 
@@ -93,45 +95,49 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   };
 
   const handleApproveExpense = async (id: string) => {
-      if (processingId) return; // Bloqueo de seguridad
+      if (processingId || successIds.has(id)) return;
       
       setProcessingId(id);
       try {
           const result = await supabaseService.approveExpense(id);
           if (result && result.success) {
               soundService.playSuccess();
-              setFeedbackId({ id, type: 'SUCCESS', msg: '¡GASTO APROBADO!' });
               
-              // Eliminación optimista de la UI
+              // 1. Marcar como éxito visual
+              setSuccessIds(prev => new Set(prev).add(id));
+              
+              // 2. Esperar 1.5 segundos para que el padre vea el mensaje de "APROBADO"
               setTimeout(() => {
+                  // 3. Eliminar de la lista local para que desaparezca
                   setPendingExpenses(prev => prev.filter(e => e.id !== id));
-                  setFeedbackId(null);
                   setProcessingId(null);
-                  loadParentData(); // Recarga real de saldos
+                  
+                  // 4. Limpiar ID de éxito y recargar datos (saldos, etc)
+                  setSuccessIds(prev => {
+                      const next = new Set(prev);
+                      next.delete(id);
+                      return next;
+                  });
+                  loadParentData();
               }, 1500);
           } else {
               alert("Error: " + (result?.error || "No se pudo procesar"));
               setProcessingId(null);
           }
       } catch (e) {
-          alert("Error de conexión con la base de datos");
+          alert("Error de conexión");
           setProcessingId(null);
       }
   };
 
   const handleRejectExpense = async (id: string) => {
-      if (processingId) return;
+      if (processingId || successIds.has(id)) return;
       setProcessingId(id);
       try {
           await supabaseService.rejectExpense(id);
-          setFeedbackId({ id, type: 'ERROR', msg: 'SOLICITUD RECHAZADA' });
-          
-          setTimeout(() => {
-              setPendingExpenses(prev => prev.filter(e => e.id !== id));
-              setFeedbackId(null);
-              setProcessingId(null);
-              loadParentData();
-          }, 1500);
+          setPendingExpenses(prev => prev.filter(e => e.id !== id));
+          setProcessingId(null);
+          loadParentData();
       } catch (e) {
           alert("Error al rechazar");
           setProcessingId(null);
@@ -206,23 +212,23 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
       
       {/* SECCIÓN DE SOLICITUDES PENDIENTES */}
       {pendingExpenses.length > 0 && (
-          <div className="mb-8 bg-rose-50 border-2 border-rose-100 rounded-[2.5rem] p-6 animate-fade-in shadow-inner">
+          <div className="mb-8 bg-rose-50 border-2 border-rose-200 rounded-[2.5rem] p-6 animate-fade-in shadow-md">
               <h3 className="font-black text-rose-700 text-lg mb-4 flex items-center gap-2 uppercase tracking-tight">
-                  <AlertTriangle className="text-rose-500" size={20} /> Solicitudes por Aprobar
+                  <AlertTriangle className="text-rose-500" size={20} /> Solicitudes Pendientes
               </h3>
               <div className="grid gap-4 md:grid-cols-2">
                   {pendingExpenses.map(req => {
                       const isProcessing = processingId === req.id;
-                      const feedback = feedbackId?.id === req.id ? feedbackId : null;
+                      const isSuccess = successIds.has(req.id);
 
                       return (
-                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${feedback ? 'border-emerald-500 bg-emerald-50' : 'border-rose-50'}`}>
+                        <div key={req.id} className={`bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-2 transition-all relative overflow-hidden ${isSuccess ? 'border-emerald-500 bg-emerald-50 scale-95 opacity-50' : 'border-rose-100'}`}>
                             
-                            {/* OVERLAY DE CONFIRMACIÓN */}
-                            {feedback && (
-                                <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center text-white animate-fade-in ${feedback.type === 'SUCCESS' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                                    {feedback.type === 'SUCCESS' ? <CheckCircle2 size={32} className="animate-bounce" /> : <X size={32} />}
-                                    <span className="font-black text-xs mt-1 uppercase tracking-widest">{feedback.msg}</span>
+                            {/* OVERLAY DE ÉXITO DEFINITIVO */}
+                            {isSuccess && (
+                                <div className="absolute inset-0 z-30 bg-emerald-500 flex flex-col items-center justify-center text-white animate-fade-in">
+                                    <CheckCircle2 size={40} className="animate-bounce" />
+                                    <span className="font-black text-sm mt-1 uppercase tracking-widest">¡APROBADO CON ÉXITO!</span>
                                 </div>
                             )}
 
@@ -245,18 +251,16 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 <span className="font-black text-rose-600 text-lg">-{req.amount}</span>
                                 <div className="flex flex-col gap-1.5">
                                     <button 
-                                        disabled={!!processingId}
+                                        disabled={!!processingId || isSuccess}
                                         onClick={() => handleApproveExpense(req.id)} 
                                         className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-100 border-slate-200' : 'bg-emerald-500 border-emerald-700 text-white hover:bg-emerald-600 active:translate-y-1 active:border-b-0'}`}
-                                        title="Aprobar"
                                     >
                                         {isProcessing ? <Loader2 size={18} className="animate-spin text-slate-400" /> : <Check size={18} strokeWidth={4}/>}
                                     </button>
                                     <button 
-                                        disabled={!!processingId}
+                                        disabled={!!processingId || isSuccess}
                                         onClick={() => handleRejectExpense(req.id)} 
                                         className={`p-2 rounded-xl shadow-sm transition-all border-b-4 ${isProcessing ? 'bg-slate-50 border-slate-100' : 'bg-slate-200 border-slate-400 text-slate-500 hover:bg-slate-300 active:translate-y-1 active:border-b-0'}`}
-                                        title="Rechazar"
                                     >
                                         <X size={18} strokeWidth={4}/>
                                     </button>
@@ -275,7 +279,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
           <h3 className="font-bold text-slate-400 text-[10px] uppercase tracking-widest mb-2 pl-2">Mis Hijos</h3>
           {children.length === 0 && (
              <div className="p-6 bg-slate-50 rounded-3xl text-slate-400 text-sm font-bold text-center border-2 border-dashed border-slate-200 opacity-60">
-                <UserIcon size={32} className="mx-auto mb-2 opacity-50"/> No hay cuentas vinculadas.
+                <UserIcon size={32} className="mx-auto mb-2 opacity-50"/> No hay vinculados.
              </div>
           )}
           {children.map(s => (
