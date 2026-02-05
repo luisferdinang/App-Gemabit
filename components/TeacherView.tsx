@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, StudentReport, QuizType, QuizResult, Quiz, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
+import { TeacherGuide } from './TeacherGuide'; // IMPORTADO
 import { 
   User as UserIcon, Check, X, ShieldAlert, BarChart3, Plus, BrainCircuit, School, 
   Home, Trophy, Gamepad2, RefreshCw, Lock, ShieldCheck, KeyRound, UserPlus, 
@@ -12,7 +13,7 @@ import {
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer, 
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
   Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert, TrendingDown,
-  Heart, SmilePlus, Meh, Frown, Coins, ArrowUpCircle, ArrowDownCircle, History
+  Heart, SmilePlus, Meh, Frown, Coins, ArrowUpCircle, ArrowDownCircle, History, HelpCircle
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { getWeekDateRange } from '../utils/dateUtils';
@@ -54,6 +55,9 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [showDeleteStudentModal, setShowDeleteStudentModal] = useState(false); // State for custom delete student modal
+
+  // Approval Confirmation State
+  const [confirmingApproval, setConfirmingApproval] = useState<{id: string, type: 'USER' | 'QUIZ', name: string, amount?: number} | null>(null);
 
   // Security / Access Code State
   const [currentAccessCode, setCurrentAccessCode] = useState('');
@@ -271,10 +275,40 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       }
   };
 
-  const handleApprove = async (uid: string) => { await supabaseService.approveUser(uid); loadData(); };
-  const handleReject = async (uid: string) => { await supabaseService.rejectUser(uid); loadData(); };
-  const handleApproveQuiz = async (id: string) => { await supabaseService.approveQuizRedemption(id); loadData(); };
-  const handleRejectQuiz = async (id: string) => { await supabaseService.rejectQuizRedemption(id); loadData(); };
+  // --- NEW APPROVAL LOGIC ---
+  const executeConfirmation = async () => {
+      if (!confirmingApproval) return;
+      setActionLoading(true);
+      
+      try {
+          if (confirmingApproval.type === 'USER') {
+              await supabaseService.approveUser(confirmingApproval.id);
+          } else {
+              await supabaseService.approveQuizRedemption(confirmingApproval.id);
+          }
+          soundService.playSuccess();
+          loadData();
+      } catch (e) {
+          alert("Error al aprobar");
+      } finally {
+          setActionLoading(false);
+          setConfirmingApproval(null);
+      }
+  };
+
+  const handleReject = async (uid: string) => { 
+      if(confirm('¿Rechazar solicitud? Se eliminará.')) {
+          await supabaseService.rejectUser(uid); 
+          loadData(); 
+      }
+  };
+  
+  const handleRejectQuiz = async (id: string) => { 
+      if(confirm('¿Rechazar pago? El alumno no recibirá los puntos.')) {
+          await supabaseService.rejectQuizRedemption(id); 
+          loadData(); 
+      }
+  };
 
   const resetForm = (targetType: QuizType = 'TEXT') => { 
       setQuestion(''); 
@@ -354,6 +388,42 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
 
   return (
     <div className="space-y-6">
+      
+      {/* MODAL DE CONFIRMACIÓN DE APROBACIÓN */}
+      {confirmingApproval && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl border-4 border-white text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
+                <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-6 border-2 border-emerald-100 shadow-inner">
+                    <HelpCircle size={48} strokeWidth={2.5} />
+                </div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2">¿Aprobar Solicitud?</h3>
+                <p className="text-slate-500 font-bold text-sm mb-2 leading-relaxed px-2">
+                    {confirmingApproval.type === 'USER' 
+                       ? <span>Vas a permitir el acceso a la clase a:<br/><strong className="text-lg text-slate-800">{confirmingApproval.name}</strong></span>
+                       : <span>Vas a pagar <b>{confirmingApproval.amount} MB</b> a:<br/><strong className="text-lg text-slate-800">{confirmingApproval.name}</strong></span>
+                    }
+                </p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Esta acción es inmediata</p>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => setConfirmingApproval(null)}
+                        className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={executeConfirmation}
+                        disabled={actionLoading}
+                        className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center"
+                    >
+                        {actionLoading ? <RefreshCw className="animate-spin" size={20}/> : 'SÍ, APROBAR'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* NAVBAR DE MAESTRA */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-2 rounded-3xl border-b-4 border-slate-200 shadow-sm overflow-x-auto">
         <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
@@ -389,6 +459,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
            </button>
         </div>
       </div>
+
+      {/* RENDERIZADO CONDICIONAL: MANUAL DE LA MAESTRA */}
+      {activeTab === 'HOW_TO' && (
+          <TeacherGuide />
+      )}
 
       {/* PESTAÑA ALUMNOS (DETALLES Y TAREAS) */}
       {activeTab === 'STUDENTS' && (
@@ -530,7 +605,6 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
 
       {/* PESTAÑA APROBACIONES (SOLICITUDES) */}
       {activeTab === 'APPROVALS' && (
-        // ... (Rest of existing code for other tabs remains identical)
         <div className="animate-fade-in space-y-8">
           
           {/* SECCIÓN: NUEVOS ALUMNOS */}
@@ -564,8 +638,20 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                             </div>
                          </div>
                          <div className="flex gap-2">
-                            <button onClick={() => handleApprove(user.uid)} className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-200 transition-colors" title="Aprobar"><Check size={20} strokeWidth={3}/></button>
-                            <button onClick={() => handleReject(user.uid)} className="p-2 bg-rose-100 text-rose-600 rounded-xl hover:bg-rose-200 transition-colors" title="Rechazar"><X size={20} strokeWidth={3}/></button>
+                            <button 
+                                onClick={() => setConfirmingApproval({id: user.uid, type: 'USER', name: user.displayName})} 
+                                className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-200 transition-colors" 
+                                title="Aprobar"
+                            >
+                                <Check size={20} strokeWidth={3}/>
+                            </button>
+                            <button 
+                                onClick={() => handleReject(user.uid)} 
+                                className="p-2 bg-rose-100 text-rose-600 rounded-xl hover:bg-rose-200 transition-colors" 
+                                title="Rechazar"
+                            >
+                                <X size={20} strokeWidth={3}/>
+                            </button>
                          </div>
                       </div>
                    ))}
@@ -611,8 +697,18 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                                <span className="text-[10px] font-bold text-slate-400">Por Cobrar</span>
                             </div>
                             <div className="flex gap-1 flex-col">
-                               <button onClick={() => handleApproveQuiz(req.id)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors"><Check size={16} strokeWidth={3}/></button>
-                               <button onClick={() => handleRejectQuiz(req.id)} className="p-1.5 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-colors"><X size={16} strokeWidth={3}/></button>
+                               <button 
+                                   onClick={() => setConfirmingApproval({id: req.id, type: 'QUIZ', name: req.studentName, amount: req.earned})}
+                                   className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors"
+                               >
+                                   <Check size={16} strokeWidth={3}/>
+                               </button>
+                               <button 
+                                   onClick={() => handleRejectQuiz(req.id)} 
+                                   className="p-1.5 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-colors"
+                               >
+                                   <X size={16} strokeWidth={3}/>
+                               </button>
                             </div>
                          </div>
                       </div>
