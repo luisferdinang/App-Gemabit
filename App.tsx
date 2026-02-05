@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { RoleSelector } from './components/RoleSelector';
 import { Layout } from './components/Layout';
@@ -11,11 +12,18 @@ import { RefreshCw } from 'lucide-react';
 import { useUserStore } from './store/userStore';
 
 export default function App() {
-  const { currentUser, setUser, updateUserFields } = useUserStore();
+  const { currentUser, setUser, updateUserFields, setExchangeRate } = useUserStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Check for existing session on mount
+    // 1. Fetch Currency Rate (Runs once on load)
+    const loadCurrency = async () => {
+        const rate = await supabaseService.getDailyExchangeRate();
+        if (rate > 0) setExchangeRate(rate);
+    };
+    loadCurrency();
+
+    // 2. Check for existing session on mount
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -35,7 +43,7 @@ export default function App() {
 
     checkSession();
 
-    // 2. Listen for auth changes
+    // 3. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -48,7 +56,7 @@ export default function App() {
     };
   }, []);
 
-  // 3. GLOBAL REALTIME LISTENER FOR CURRENT USER
+  // 4. GLOBAL REALTIME LISTENER FOR CURRENT USER
   // This ensures that whenever the DB changes (balance, xp, etc.), the UI updates INSTANTLY
   useEffect(() => {
     if (!currentUser) return;

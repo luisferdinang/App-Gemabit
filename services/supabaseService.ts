@@ -36,6 +36,8 @@ const TASK_NAMES: Record<string, string> = {
   'READING': 'Lectura'
 };
 
+const API_KEY_EXCHANGE = 'ec9a75dc8e61f17ae092f519';
+
 export const supabaseService = {
   
   // REALTIME SUBSCRIPTION HELPER
@@ -57,6 +59,47 @@ export const supabaseService = {
         supabase.removeChannel(channel);
       }
     };
+  },
+
+  // CURRENCY EXCHANGE LOGIC (Optimized)
+  getDailyExchangeRate: async (): Promise<number> => {
+    try {
+      const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+
+      // 1. Consultar BD Local
+      const { data: localData } = await supabase
+        .from('exchange_rates')
+        .select('rate')
+        .eq('date', today)
+        .single();
+
+      if (localData) {
+        console.log("💱 Tasa obtenida de Base de Datos (Sin gasto de API)");
+        return localData.rate;
+      }
+
+      // 2. Si no existe, Consultar API Externa
+      console.log("🌐 Consultando API Externa de Divisas...");
+      const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY_EXCHANGE}/latest/USD`);
+      const json = await response.json();
+
+      if (json.result === 'success') {
+        const rate = json.conversion_rates.VES;
+        
+        // 3. Guardar en BD para futuras consultas hoy
+        await supabase.from('exchange_rates').insert({
+          date: today,
+          rate: rate
+        });
+        
+        return rate;
+      }
+      
+      return 0; // Fallback
+    } catch (e) {
+      console.error("Error fetching exchange rate:", e);
+      return 0;
+    }
   },
 
   // REGISTRATION CODE MANAGEMENT

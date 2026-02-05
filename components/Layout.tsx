@@ -1,8 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check, Smartphone, Download, Share, PlusSquare, ExternalLink, Laptop } from 'lucide-react';
+import { LogOut, LayoutDashboard, Settings, X, Camera, RefreshCw, Check, Smartphone, Download, Share, PlusSquare, ExternalLink, Laptop, DollarSign } from 'lucide-react';
 import { User } from '../types';
 import { STUDENT_AVATARS, PARENT_AVATARS } from './RoleSelector';
 import { supabaseService } from '../services/supabaseService';
+import { useUserStore } from '../store/userStore';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +14,7 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refreshUser }) => {
+  const { exchangeRate } = useUserStore(); // Get Exchange Rate from global store
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState(user?.displayName || '');
   const [loading, setLoading] = useState(false);
@@ -119,12 +122,27 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, refres
             alt="Gemabit Logo" 
             className="w-10 h-10 object-contain hover:scale-110 transition-transform" 
           />
-          <span className="font-black text-2xl tracking-tight text-slate-700 hidden sm:block">
-            Gemabit
-          </span>
+          <div className="hidden sm:block">
+             <span className="font-black text-xl tracking-tight text-slate-700 block leading-none">
+                Gemabit
+             </span>
+             {exchangeRate > 0 && (
+                 <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                    $1 = {exchangeRate.toFixed(2)} Bs
+                 </span>
+             )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
+          
+          {/* CURRENCY TICKER MOBILE */}
+          {exchangeRate > 0 && (
+             <div className="sm:hidden bg-slate-100 px-2 py-1 rounded-lg text-[9px] font-black text-slate-500">
+                1$ = {exchangeRate.toFixed(1)}Bs
+             </div>
+          )}
+
           {/* BOTÓN DE INSTALACIÓN VISIBLE EN BARRA SUPERIOR */}
           {(!isInstalled && (deferredPrompt || isIOS)) && (
             <button
