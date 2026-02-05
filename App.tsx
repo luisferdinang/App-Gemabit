@@ -12,16 +12,19 @@ import { RefreshCw } from 'lucide-react';
 import { useUserStore } from './store/userStore';
 
 export default function App() {
-  const { currentUser, setUser, updateUserFields, setExchangeRate } = useUserStore();
+  const { currentUser, setUser, updateUserFields, setExchangeRate, setSystemStartDate } = useUserStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Fetch Currency Rate (Runs once on load)
-    const loadCurrency = async () => {
-        const rate = await supabaseService.getDailyExchangeRate();
-        if (rate > 0) setExchangeRate(rate);
+    // 1. Fetch Currency Rate & System Settings (Runs once on load)
+    const loadSettings = async () => {
+      const rate = await supabaseService.getDailyExchangeRate();
+      if (rate > 0) setExchangeRate(rate);
+
+      const startWeek = await supabaseService.getSystemStartWeekId();
+      setSystemStartDate(startWeek);
     };
-    loadCurrency();
+    loadSettings();
 
     // 2. Check for existing session on mount
     const checkSession = async () => {
@@ -64,24 +67,24 @@ export default function App() {
     console.log("Setting up Realtime Listener for User:", currentUser.uid);
 
     const subscription = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, (payload) => {
-        if (payload && payload.new) {
-            console.log("⚡️ REALTIME UPDATE RECEIVED:", payload.new);
-            // Optimistically update the store without a network fetch
-            const updatedFields: Partial<User> = {
-                balance: payload.new.balance,
-                xp: payload.new.xp,
-                streakWeeks: payload.new.streak_weeks,
-                status: payload.new.status,
-                avatar: payload.new.avatar_url,
-                displayName: payload.new.display_name,
-                // Add other mapped fields if necessary
-            };
-            updateUserFields(updatedFields);
-        }
+      if (payload && payload.new) {
+        console.log("⚡️ REALTIME UPDATE RECEIVED:", payload.new);
+        // Optimistically update the store without a network fetch
+        const updatedFields: Partial<User> = {
+          balance: payload.new.balance,
+          xp: payload.new.xp,
+          streakWeeks: payload.new.streak_weeks,
+          status: payload.new.status,
+          avatar: payload.new.avatar_url,
+          displayName: payload.new.display_name,
+          // Add other mapped fields if necessary
+        };
+        updateUserFields(updatedFields);
+      }
     });
 
     return () => {
-        subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [currentUser?.uid]); // Only recreate if UID changes
 
@@ -102,11 +105,11 @@ export default function App() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center animate-bounce-slow">
-           <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-12 h-12 object-contain" />
+          <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-12 h-12 object-contain" />
         </div>
         <div className="flex items-center gap-2 text-violet-500 font-black text-sm uppercase tracking-widest">
-           <RefreshCw className="animate-spin" size={18} />
-           Cargando Gemabit...
+          <RefreshCw className="animate-spin" size={18} />
+          Cargando Gemabit...
         </div>
       </div>
     );
