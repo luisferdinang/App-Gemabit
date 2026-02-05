@@ -6,12 +6,14 @@ import { TaskController } from './TaskController';
 import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
 import { getWeekDateRange } from '../utils/dateUtils';
 import { soundService } from '../services/soundService';
+import { useUserStore } from '../store/userStore';
 
 interface ParentViewProps {
   currentUser: User;
 }
 
 export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
+  const { exchangeRate } = useUserStore(); // Acceder a la tasa de cambio global
   const [children, setChildren] = useState<User[]>([]);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [isLinking, setIsLinking] = useState(false);
@@ -181,6 +183,10 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
   const gemCount = activeKid ? Math.floor(activeKid.balance / 100) : 0;
   const miniBitCount = activeKid ? activeKid.balance % 100 : 0;
   const isPastWeek = selectedWeek !== getCurrentWeekId();
+
+  // CURRENCY CALCULATION FOR PARENTS
+  const balanceUSD = activeKid ? (activeKid.balance / 100).toFixed(2) : '0.00';
+  const balanceVES = activeKid && exchangeRate > 0 ? ((activeKid.balance / 100) * exchangeRate).toFixed(2) : '---';
 
   const getTransactionVisuals = (t: Transaction) => {
       const desc = t.description.toUpperCase();
@@ -362,6 +368,14 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 Racha: {activeKid.streakWeeks} Sem.
                               </span>
                            </div>
+                           
+                           {/* PARENT VIEW CURRENCY CONVERSION DISPLAY */}
+                           <div className="mt-3 inline-block">
+                               <span className="text-[10px] font-black text-emerald-100 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2">
+                                   Valor Real: <span className="text-white">${balanceUSD} USD</span> • <span className="text-white">Bs.{balanceVES}</span>
+                               </span>
+                           </div>
+
                         </div>
                   </div>
                   <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
