@@ -152,7 +152,15 @@ export const supabaseService = {
 
   // AUTHENTICATION
   login: async (username: string, password?: string): Promise<{ user?: User, error?: string }> => {
-    const email = `${username.toLowerCase().replace(/\s+/g, '')}@gemabit.app`;
+    const cleanUsername = username.toLowerCase().replace(/\s+/g, '');
+    const email = `${cleanUsername}@gemabit.app`;
+
+    // Check if user exists first to provide better console diagnostics
+    const { data: userExists } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .single();
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -160,7 +168,15 @@ export const supabaseService = {
     });
 
     if (authError) {
-      if (authError.message.includes('Invalid login')) return { error: 'Usuario o contraseña incorrectos.' };
+      if (authError.message.includes('Invalid login')) {
+        if (!userExists) {
+          console.error(`🔴 ERROR LOGIN: El usuario "${username}" NO existe en la base de datos.`);
+        } else {
+          console.error(`🟠 ERROR LOGIN: El usuario "${username}" existe, pero la CONTRASEÑA es incorrectA.`);
+        }
+        return { error: 'Usuario o contraseña incorrectos.' };
+      }
+      console.error("❌ ERROR LOGIN INESPERADO:", authError.message);
       return { error: 'Error al iniciar sesión.' };
     }
 
