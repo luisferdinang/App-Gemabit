@@ -769,54 +769,7 @@ export const supabaseService = {
     }));
   },
 
-  depositToGoal: async (goalId: string, amount: number) => {
-    const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
-    if (!goal) return { success: false, error: 'Meta no encontrada' };
-
-    const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
-    if (!student || student.balance < amount) return { success: false, error: 'Saldo insuficiente' };
-
-    await supabase.from('profiles').update({ balance: student.balance - amount }).eq('id', goal.student_id);
-    await supabase.from('savings_goals').update({ current_amount: goal.current_amount + amount }).eq('id', goalId);
-
-    await supabase.from('transactions').insert({
-      student_id: goal.student_id,
-      amount: -amount,
-      description: `Ahorro: ${goal.title}`,
-      type: 'SPEND',
-      timestamp: Date.now()
-    });
-
-    return { success: true };
-  },
-
-  withdrawFromGoal: async (goalId: string, amount: number) => {
-    const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
-    if (!goal) return { success: false, error: 'Meta no encontrada' };
-    if (goal.current_amount < amount) return { success: false, error: 'Fondos insuficientes en la meta' };
-
-    const { data: student } = await supabase.from('profiles').select('balance').eq('id', goal.student_id).single();
-    if (!student) return { success: false, error: 'Error de usuario' };
-
-    await supabase.from('profiles').update({ balance: student.balance + amount }).eq('id', goal.student_id);
-    await supabase.from('savings_goals').update({ current_amount: goal.current_amount - amount }).eq('id', goalId);
-
-    await supabase.from('transactions').insert({
-      student_id: goal.student_id,
-      amount: amount,
-      description: `Retiro: ${goal.title}`,
-      type: 'EARN',
-      timestamp: Date.now()
-    });
-
-    return { success: true };
-  },
-
   deleteGoal: async (goalId: string) => {
-    const { data: goal } = await supabase.from('savings_goals').select('*').eq('id', goalId).single();
-    if (goal && goal.current_amount > 0) {
-      await supabaseService.withdrawFromGoal(goalId, goal.current_amount);
-    }
     await supabase.from('savings_goals').delete().eq('id', goalId);
     return { success: true };
   },
