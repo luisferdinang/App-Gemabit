@@ -33,21 +33,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Estrategia: Network First (Red primero, si falla, caché)
-  // Esto asegura que los parches de código lleguen al teléfono de inmediato
+  // Estrategia: Stale-While-Revalidate
+  // 1. Responder inmediatamente desde caché (si existe)
+  // 2. En paralelo, buscar versión nueva en red y actualizar caché
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        // Guardar en caché para uso offline posterior
-        const clonedResponse = response.clone();
+    caches.match(event.request).then(cachedResponse => {
+      const fetchPromise = fetch(event.request).then(networkResponse => {
         caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, clonedResponse);
+          cache.put(event.request, networkResponse.clone());
         });
-        return response;
-      })
-      .catch(() => {
-        // Si falla la red, intentar desde caché
-        return caches.match(event.request);
-      })
+        return networkResponse;
+      });
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
