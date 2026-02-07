@@ -82,6 +82,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetConfirmString, setResetConfirmString] = useState('');
 
+  // Soft Reset State (Restart Project without deleting users)
+  const [showSoftResetModal, setShowSoftResetModal] = useState(false);
+  const [softResetConfirmString, setSoftResetConfirmString] = useState('');
+
   // Quiz Modal State
   const [showQuizModal, setShowQuizModal] = useState(false);
   const [quizType, setQuizType] = useState<QuizType>('TEXT');
@@ -296,6 +300,24 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       setResetConfirmString('');
       alert("✅ El sistema se ha reiniciado. La base de datos está limpia.");
       window.location.href = '/';
+    } else {
+      alert("Error al reiniciar: " + result.error);
+    }
+  };
+
+  const handleSoftReset = async () => {
+    if (softResetConfirmString.toUpperCase() !== 'NUEVO') {
+      alert("Debes escribir NUEVO para confirmar.");
+      return;
+    }
+    setActionLoading(true);
+    const result = await supabaseService.restartProject();
+    setActionLoading(false);
+    if (result.success) {
+      setShowSoftResetModal(false);
+      setSoftResetConfirmString('');
+      alert("✅ ¡Proyecto Reiniciado! Todos los alumnos mantienen sus cuentas pero sus monedas y rachas han vuelto a cero.");
+      window.location.reload();
     } else {
       alert("Error al reiniciar: " + result.error);
     }
@@ -1151,6 +1173,27 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
             </form>
           </div>
 
+          <div className="bg-amber-50 rounded-[2.5rem] p-6 border-2 border-amber-100 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl">
+                  <Repeat size={24} />
+                </div>
+                <h3 className="font-black text-amber-700 text-lg">Reiniciar Proyecto</h3>
+              </div>
+              <p className="text-amber-600 text-xs font-bold leading-relaxed mb-6">
+                Reinicia las monedas, rachas y tareas de <b>todos</b> los alumnos. Las cuentas de usuario <b>NO</b> se borrarán. Ideal para empezar un nuevo mes o reto.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowSoftResetModal(true)}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest shadow-lg shadow-amber-100 flex items-center justify-center gap-2"
+            >
+              <Repeat size={20} /> Empezar de Nuevo
+            </button>
+          </div>
+
           <div className="bg-red-50 rounded-[2.5rem] p-6 border-2 border-red-100 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-3 mb-4">
@@ -1160,7 +1203,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                 <h3 className="font-black text-red-700 text-lg">Zona de Peligro</h3>
               </div>
               <p className="text-red-500 text-xs font-bold leading-relaxed mb-6">
-                Aquí puedes reiniciar toda la aplicación para empezar un nuevo curso escolar. Esta acción es irreversible.
+                Aquí puedes borrar <b>toda</b> la base de datos (incluyendo usuarios). Esta acción es irreversible y solo se recomienda para mantenimiento crítico.
               </p>
             </div>
 
@@ -1168,7 +1211,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
               onClick={() => setShowResetModal(true)}
               className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl border-b-[6px] border-red-800 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest shadow-lg shadow-red-100 flex items-center justify-center gap-2"
             >
-              <Trash2 size={20} /> Reinicio de Fábrica
+              <Trash2 size={20} /> Reinicio Total (Borrar Usuarios)
             </button>
           </div>
         </div>
@@ -1422,17 +1465,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
             <div className="mb-6 inline-block p-6 bg-red-100 text-red-600 rounded-full animate-pulse">
               <AlertTriangle size={48} strokeWidth={2.5} />
             </div>
-            <h2 className="text-3xl font-black text-slate-800 mb-2">¿Reiniciar Todo?</h2>
+            <h2 className="text-3xl font-black text-slate-800 mb-2">¿Borrar TODO?</h2>
             <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">
-              Esto borrará <b>todos</b> los alumnos, tareas, monedas y juegos. La App volverá a estar vacía como el primer día.<br /><br />
-              <span className="text-red-500">Esta acción no se puede deshacer.</span>
+              Esto borrará <b>TODOS LOS USUARIOS</b> y sus datos. La App volverá a estar totalmente vacía.<br /><br />
+              <span className="text-red-500 font-black">ESTA ACCIÓN ES IRREVERSIBLE.</span>
             </p>
 
             <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 mb-6 text-left">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-1">Confirmación de Seguridad</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-1">Escribe "REINICIAR" para confirmar</label>
               <input
                 type="text"
-                placeholder='Escribe "REINICIAR"'
+                placeholder='REINICIAR'
                 value={resetConfirmString}
                 onChange={e => setResetConfirmString(e.target.value)}
                 className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 font-black text-slate-700 outline-none focus:border-red-500 transition-colors"
@@ -1446,7 +1489,45 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                 disabled={resetConfirmString.toUpperCase() !== 'REINICIAR' || actionLoading}
                 className="flex-1 py-4 bg-red-600 text-white font-black rounded-2xl shadow-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
               >
-                {actionLoading ? 'Borrando...' : 'REINICIAR'}
+                {actionLoading ? 'Borrando...' : 'BORRAR TODO'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REINICIAR PROYECTO (SOFT RESET) */}
+      {showSoftResetModal && (
+        <div className="fixed inset-0 bg-amber-900/90 flex items-center justify-center p-4 z-[120] backdrop-blur-md animate-fade-in text-center">
+          <div className="bg-white rounded-[3rem] w-full max-w-md p-8 shadow-2xl border-8 border-amber-400 relative overflow-hidden">
+            <div className="mb-6 inline-block p-6 bg-amber-100 text-amber-600 rounded-full">
+              <Repeat size={48} strokeWidth={2.5} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 mb-2">¿Reiniciar Avances?</h2>
+            <p className="text-slate-500 font-bold text-sm mb-8 leading-relaxed">
+              Todos los alumnos volverán a tener <b>0 MB</b> y sus rachas de semanas se reiniciarán. <br /><br />
+              <span className="text-amber-600 font-black">Tus alumnos mantendrán sus usuarios y contraseñas.</span>
+            </p>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 mb-6 text-left">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-1">Escribe "NUEVO" para confirmar</label>
+              <input
+                type="text"
+                placeholder='NUEVO'
+                value={softResetConfirmString}
+                onChange={e => setSoftResetConfirmString(e.target.value)}
+                className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 font-black text-slate-700 outline-none focus:border-amber-500 transition-colors"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowSoftResetModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl hover:bg-slate-200 transition-colors">Cancelar</button>
+              <button
+                onClick={handleSoftReset}
+                disabled={softResetConfirmString.toUpperCase() !== 'NUEVO' || actionLoading}
+                className="flex-1 py-4 bg-amber-500 text-white font-black rounded-2xl shadow-lg border-b-4 border-amber-700 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale"
+              >
+                {actionLoading ? 'Reiniciando...' : 'REINICIAR'}
               </button>
             </div>
           </div>

@@ -288,6 +288,38 @@ export const supabaseService = {
     }
   },
 
+  restartProject: async (): Promise<{ success: boolean, error?: string }> => {
+    try {
+      const zeroUuid = '00000000-0000-0000-0000-000000000000';
+
+      // 1. Clear all history/progress tables
+      await supabase.from('transactions').delete().neq('id', zeroUuid);
+      await supabase.from('tasks').delete().neq('id', zeroUuid);
+      await supabase.from('quiz_results').delete().neq('id', zeroUuid);
+      await supabase.from('expense_requests').delete().neq('id', zeroUuid);
+      await supabase.from('savings_goals').delete().neq('id', zeroUuid);
+
+      // 2. Reset student/parent balances and streaks (Except Teacher)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          balance: 0,
+          xp: 0,
+          streak_weeks: 0
+        })
+        .neq('role', 'MAESTRA');
+
+      if (profileError) return { success: false, error: profileError.message };
+
+      // 3. Set the current week as the new "Week 1"
+      await supabaseService.updateSystemStartWeekId(getCurrentWeekId());
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  },
+
   resetSystemData: async (adminUid: string): Promise<{ success: boolean, error?: string }> => {
     try {
       const zeroUuid = '00000000-0000-0000-0000-000000000000';
