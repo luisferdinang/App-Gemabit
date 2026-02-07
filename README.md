@@ -45,10 +45,17 @@ En la cuenta de Maestra, la pestaña **PROYECTAR** ofrece una vista optimizada p
 - **Gráficos Semanales:** Barras de progreso de tareas escolares vs. hogar.
 - **Código de Acceso:** Visible pero discreto para nuevos ingresos.
 
+### 🔒 Gestión de Seguridad y Contraseñas
+- **Sistema de Cambio de Clave:**
+    - Alumnos y Padres pueden cambiar su propia contraseña.
+    - **Vínculos de Familia:** Los alumnos pueden resetear la clave de sus padres vinculados y viceversa.
+    - **Control Docente:** La maestra puede resetear la contraseña de cualquier alumno o padre desde su panel.
+- **Validación de Relación:** El sistema verifica el `link_code` antes de permitir cambios entre familiares.
+
 ### 🛠 Tecnología
 
 - **Frontend:** React 18, Vite, TypeScript.
-- **Estilos:** Tailwind CSS.
+- **Estilos:** Vanilla CSS (Flexible y Personalizado).
 - **Iconos:** Lucide React.
 - **Backend / DB:** Supabase (PostgreSQL, Auth, Realtime).
 - **Sonidos:** Servicio de audio personalizado con caché.
@@ -135,7 +142,22 @@ create table quiz_results (
   created_at bigint
 );
 
--- 6. Configuración de la App
+-- 6. Función RPC para cambio de contraseñas (Requerido)
+-- Define esta función en SQL Editor para permitir el reseteo administrativo
+create or replace function reset_user_password(user_id uuid, new_password text)
+returns void
+language plpgsql
+security definer
+set search_path = auth, public
+as $$
+begin
+  update auth.users
+  set encrypted_password = crypt(new_password, gen_salt('bf'))
+  where id = user_id;
+end;
+$$;
+
+-- 7. Configuración de la App
 create table app_settings (
   key text primary key,
   value text
