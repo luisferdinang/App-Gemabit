@@ -2,12 +2,20 @@
 import { supabase } from './supabaseClient';
 import { User, TaskLog, Transaction, Quiz, StudentReport, QuizResult, UserRole, ExpenseRequest, SavingsGoal, ExpenseCategory } from '../types';
 
-// Helper to generate Week ID
+// Helper to generate Week ID (ISO-8601: Monday to Sunday)
 export const getCurrentWeekId = () => {
   const now = new Date();
-  const onejan = new Date(now.getFullYear(), 0, 1);
-  const week = Math.ceil((((now.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
-  return `${now.getFullYear()}-W${week}`;
+  const date = new Date(now.getTime());
+  date.setHours(0, 0, 0, 0);
+  // Monday is day 1, Sunday is day 7
+  const day = date.getDay() || 7;
+  // Set to nearest Thursday: current date + 4 - current day number
+  date.setDate(date.getDate() + 4 - day);
+  // Get first day of year
+  const yearStart = new Date(date.getFullYear(), 0, 1);
+  // Calculate full weeks to nearest Thursday
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getFullYear()}-W${weekNo}`;
 };
 
 // Helper to map DB profile to User Type
