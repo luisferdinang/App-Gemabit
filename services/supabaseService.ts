@@ -86,26 +86,38 @@ export const supabaseService = {
         return localData.rate;
       }
 
-      // 2. Si no existe, Consultar API Externa
+      // 2. Si no existe, Consultar API Externa con Timeout de 5s
       console.log("🌐 Consultando API Externa de Divisas...");
-      const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY_EXCHANGE}/latest/USD`);
-      const json = await response.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      if (json.result === 'success') {
-        const rate = json.conversion_rates.VES;
+      try {
+        const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY_EXCHANGE}/latest/USD`, { signal: controller.signal });
+        const json = await response.json();
+        clearTimeout(timeoutId);
 
-        // 3. Guardar en BD para futuras consultas hoy
-        await supabase.from('exchange_rates').insert({
-          date: today,
-          rate: rate
-        });
+        if (json.result === 'success') {
+          const rate = json.conversion_rates.VES;
 
-        return rate;
+          // 3. Guardar en BD para futuras consultas hoy
+          await supabase.from('exchange_rates').insert({
+            date: today,
+            rate: rate
+          });
+
+          return rate;
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          console.warn("⚠️ API de divisas tardó demasiado, usando valor por defecto.");
+        } else {
+          console.error("Error fetching exchange rate:", err);
+        }
       }
 
       return 0; // Fallback
     } catch (e) {
-      console.error("Error fetching exchange rate:", e);
+      console.error("Error in getDailyExchangeRate:", e);
       return 0;
     }
   },
@@ -191,7 +203,7 @@ export const supabaseService = {
     // Attempt to fetch profile with a small retry logic to handle RLS/Session propagation lag
     let profile = null;
     let attempts = 0;
-    while (attempts < 2) {
+    while (attempts < 3) {
       const { data, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
@@ -203,16 +215,24 @@ export const supabaseService = {
         break;
       }
 
-      if (profileErr && profileErr.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-        console.error(`⚠️ Intento ${attempts + 1} fallido al buscar perfil:`, profileErr.message);
+      // FALLBACK: Si no lo encuentra por ID pero Auth fue exitoso, intentar por username
+      const { data: fallbackData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (fallbackData) {
+        profile = fallbackData;
+        break;
       }
 
       attempts++;
-      if (attempts < 2) await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
+      if (attempts < 3) await new Promise(r => setTimeout(r, 800)); // Incremental wait
     }
 
     if (!profile) {
-      console.error(`💥 ERROR CRÍTICO: Auth exitoso para ${authData.user.id} but NO se encontró perfil en la tabla 'profiles' después de reintentos.`);
+      console.error(`💥 ERROR CRÍTICO: Perfil no encontrado para "${username}" después de reintentos y fallback.`);
       return { error: 'Perfil no encontrado' };
     }
 
