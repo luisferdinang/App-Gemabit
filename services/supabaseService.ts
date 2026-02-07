@@ -188,13 +188,33 @@ export const supabaseService = {
       return { error: 'Error al iniciar sesión.' };
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
+    // Attempt to fetch profile with a small retry logic to handle RLS/Session propagation lag
+    let profile = null;
+    let attempts = 0;
+    while (attempts < 2) {
+      const { data, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
 
-    if (!profile) return { error: 'Perfil no encontrado' };
+      if (data) {
+        profile = data;
+        break;
+      }
+
+      if (profileErr && profileErr.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error(`⚠️ Intento ${attempts + 1} fallido al buscar perfil:`, profileErr.message);
+      }
+
+      attempts++;
+      if (attempts < 2) await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
+    }
+
+    if (!profile) {
+      console.error(`💥 ERROR CRÍTICO: Auth exitoso para ${authData.user.id} but NO se encontró perfil en la tabla 'profiles' después de reintentos.`);
+      return { error: 'Perfil no encontrado' };
+    }
 
     if (profile.status === 'DELETED' || profile.status === 'DELETED_ARCHIVE') return { error: 'Esta cuenta ha sido eliminada.' };
     if (profile.status === 'PENDING') return { error: 'Cuenta pendiente de aprobación.' };
@@ -461,9 +481,17 @@ export const supabaseService = {
   },
 
   getStudentById: async (id: string): Promise<User | undefined> => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', id).single();
-    if (!data || data.status === 'DELETED' || data.status === 'DELETED_ARCHIVE') return undefined;
-    return mapProfileToUser(data);
+    let attempts = 0;
+    while (attempts < 2) {
+      const { data } = await supabase.from('profiles').select('*').eq('id', id).single();
+      if (data) {
+        if (data.status === 'DELETED' || data.status === 'DELETED_ARCHIVE') return undefined;
+        return mapProfileToUser(data);
+      }
+      attempts++;
+      if (attempts < 2) await new Promise(r => setTimeout(r, 500));
+    }
+    return undefined;
   },
 
   approveUser: async (uid: string) => {

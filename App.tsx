@@ -35,6 +35,10 @@ export default function App() {
           const userProfile = await supabaseService.getStudentById(session.user.id);
           if (userProfile) {
             setUser(userProfile);
+          } else {
+            console.error("Session exists but profile not found. Logging out.");
+            await supabaseService.logout();
+            setUser(null);
           }
         }
       } catch (error) {
@@ -48,9 +52,16 @@ export default function App() {
 
     // 3. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("🔔 Auth Event State Change:", event);
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setLoading(false);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        // If we don't have a user in store yet, fetch it
+        const userProfile = await supabaseService.getStudentById(session.user.id);
+        if (userProfile) {
+          setUser(userProfile);
+        }
       }
     });
 
