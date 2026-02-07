@@ -13,12 +13,14 @@ import {
   Smartphone, Repeat, PiggyBank, TrendingUp, Wallet, LayoutGrid, Timer,
   Camera, Upload, Search, Download, AlertTriangle, Database, Terminal, Copy, ExternalLink,
   Crown, GraduationCap, Medal, Sparkles, Key, Ghost, TriangleAlert, TrendingDown,
-  Heart, SmilePlus, Meh, Frown, Coins, ArrowUpCircle, ArrowDownCircle, History, HelpCircle
+  Heart, SmilePlus, Meh, Frown, Coins, ArrowUpCircle, ArrowDownCircle, History, HelpCircle,
+  Link as LinkIcon
 } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { getWeekDateRange, getRelativeWeekNumber } from '../utils/dateUtils';
 import { useUserStore } from '../store/userStore';
 import { getGameVisual } from '../utils/gameUtils';
+import { PasswordChangeModal } from './PasswordChangeModal';
 
 interface TeacherViewProps {
   currentUser: User;
@@ -27,12 +29,17 @@ interface TeacherViewProps {
 
 export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUser }) => {
   const { systemStartDate } = useUserStore();
-  const [activeTab, setActiveTab] = useState<'STUDENTS' | 'APPROVALS' | 'REPORTS' | 'SECURITY' | 'PRESENTATION' | 'HOW_TO' | 'ARCADE'>('STUDENTS');
+  const [activeTab, setActiveTab] = useState<'STUDENTS' | 'APPROVALS' | 'REPORTS' | 'SECURITY' | 'PRESENTATION' | 'HOW_TO' | 'ARCADE' | 'PARENTS'>('STUDENTS');
   const [students, setStudents] = useState<User[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [pendingQuizApprovals, setPendingQuizApprovals] = useState<any[]>([]);
   const [reports, setReports] = useState<StudentReport[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+
+  // Parents Management State
+  const [parents, setParents] = useState<User[]>([]);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordTargetParent, setPasswordTargetParent] = useState<{ id: string; name: string } | undefined>(undefined);
 
   // Student Detail View State
   const [availableWeeks, setAvailableWeeks] = useState<{ weekId: string, completion: number }[]>([]);
@@ -132,6 +139,10 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     setStudents(s);
     const p = await supabaseService.getPendingUsers();
     setPendingUsers(p);
+
+    // Always load parents data too
+    const pr = await supabaseService.getParents();
+    setParents(pr);
     const q = await supabaseService.getPendingQuizApprovals();
     setPendingQuizApprovals(q);
     const r = await supabaseService.getClassReport();
@@ -170,6 +181,19 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     // Ahora cargamos TRANSACCIONES, no solo expenses
     const trans = await supabaseService.getTransactions(uid);
     setStudentTransactions(trans);
+  };
+
+  const loadParents = async () => {
+    const parentsList = await supabaseService.getParents();
+    setParents(parentsList);
+  };
+
+  const openParentPasswordModal = (parent: User) => {
+    setPasswordTargetParent({
+      id: parent.uid,
+      name: parent.displayName
+    });
+    setShowPasswordModal(true);
   };
 
   useEffect(() => {
@@ -432,6 +456,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
           {[
             { id: 'STUDENTS', label: 'Alumnos', icon: <School size={18} /> },
             { id: 'ARCADE', label: 'Juegos', icon: <LayoutGrid size={18} /> },
+            { id: 'PARENTS', label: 'Padres', icon: <UserIcon size={18} /> },
             { id: 'REPORTS', label: 'Informe', icon: <BarChart3 size={18} /> },
             { id: 'APPROVALS', label: 'Solicitudes', icon: <Clock size={18} /> },
             { id: 'SECURITY', label: 'Seguridad', icon: <Lock size={18} /> }
@@ -991,6 +1016,72 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         </div>
       )}
 
+      {/* PESTAÑA PADRES */}
+      {activeTab === 'PARENTS' && (
+        <div className="animate-fade-in space-y-6">
+          <div className="bg-white rounded-[2.5rem] p-8 border-2 border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <h3 className="font-black text-slate-800 text-2xl flex items-center gap-2">
+                  <UserIcon className="text-violet-500" size={28} />
+                  Gestión de Padres
+                </h3>
+                <p className="text-slate-400 font-bold text-sm">Administra el acceso de los representantes</p>
+              </div>
+              <div className="bg-violet-50 px-6 py-3 rounded-2xl border-2 border-violet-100">
+                <span className="block text-[10px] font-black text-violet-400 uppercase tracking-widest leading-none mb-1">Total de Padres</span>
+                <span className="text-2xl font-black text-violet-700">{parents.length}</span>
+              </div>
+            </div>
+
+            {parents.length === 0 ? (
+              <div className="text-center py-16 bg-slate-50 rounded-[3rem] border-4 border-dashed border-slate-100">
+                <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm border-2 border-slate-50 text-slate-200">
+                  <Ghost size={40} />
+                </div>
+                <h4 className="font-black text-slate-400">No hay padres registrados aún</h4>
+                <p className="text-xs font-bold text-slate-300 uppercase mt-1">Cuando vinculen su cuenta aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {parents.map(parent => (
+                  <div key={parent.uid} className="bg-white p-5 rounded-[2rem] border-2 border-slate-100 shadow-sm hover:border-violet-200 hover:shadow-md transition-all group relative overflow-hidden">
+                    <div className="flex items-center gap-4 relative z-10">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 overflow-hidden shrink-0 shadow-inner group-hover:scale-110 transition-transform">
+                        <img src={parent.avatar || `https://api.dicebear.com/9.x/bottts/svg?seed=${parent.username}`} alt={parent.displayName} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-black text-slate-800 truncate leading-none mb-1">{parent.displayName}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{parent.username}</span>
+                          {parent.linkCode && (
+                            <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <LinkIcon size={10} /> {parent.linkCode}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-1 gap-2 relative z-10">
+                      <button
+                        onClick={() => openParentPasswordModal(parent)}
+                        className="w-full bg-slate-100 hover:bg-violet-50 text-slate-600 hover:text-violet-700 font-black py-3 rounded-xl border-b-4 border-slate-200 hover:border-violet-200 active:border-b-0 active:translate-y-1 transition-all text-xs flex items-center justify-center gap-2"
+                      >
+                        <Lock size={14} /> Cambiar Contraseña
+                      </button>
+                    </div>
+
+                    {/* Fondo decorativo */}
+                    <UserIcon className="absolute -right-4 -bottom-4 text-slate-50 group-hover:text-violet-50 transition-colors rotate-12" size={100} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* PESTAÑA SEGURIDAD */}
       {activeTab === 'SECURITY' && (
         <div className="animate-fade-in grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -1362,6 +1453,23 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         </div>
       )}
 
+      {/* MODAL DE CAMBIO DE CONTRASEÑA PARA PADRES */}
+      <PasswordChangeModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        mode="linked"
+        targetUser={passwordTargetParent ? {
+          id: passwordTargetParent.id,
+          name: passwordTargetParent.name,
+          role: 'PADRE'
+        } : undefined}
+        currentUserId={currentUser.uid}
+        currentUserRole="MAESTRA" // We use MAESTRA role logic for resets
+        onSuccess={() => {
+          soundService.playSuccess();
+          loadData();
+        }}
+      />
     </div>
   );
 };

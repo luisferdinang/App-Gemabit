@@ -19,6 +19,7 @@ import { SortingGame } from './games/SortingGame';
 import { SequenceGame } from './games/SequenceGame';
 import { IntruderGame } from './games/IntruderGame';
 import { useUserStore, UserState } from '../store/userStore';
+import { PasswordChangeModal } from './PasswordChangeModal';
 
 interface StudentViewProps {
     student: User; // Keeps receiving prop for initial load but uses store for updates
@@ -76,6 +77,12 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
 
     // Avatar Modal State
     const [showAvatarModal, setShowAvatarModal] = useState(false);
+
+    // Password Change Modal State
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordModalMode, setPasswordModalMode] = useState<'self' | 'linked'>('self');
+    const [passwordTargetUser, setPasswordTargetUser] = useState<{ id: string; name: string; role: 'ALUMNO' | 'PADRE' } | undefined>(undefined);
+    const [linkedParents, setLinkedParents] = useState<User[]>([]);
 
     // Celebration State
     const [showCelebration, setShowCelebration] = useState(false);
@@ -139,7 +146,8 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
             loadQuizData(),
             loadExpenses(),
             loadGoals(),
-            loadFinanceData()
+            loadFinanceData(),
+            loadLinkedParents()
         ]);
     };
 
@@ -190,6 +198,25 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
     const loadFinanceData = async () => {
         const t = await supabaseService.getTransactions(student.uid);
         setFinanceTransactions(t);
+    };
+
+    const loadLinkedParents = async () => {
+        const parents = await supabaseService.getLinkedParents(student.uid);
+        setLinkedParents(parents);
+    };
+
+    const openPasswordModal = (mode: 'self' | 'linked', targetUser?: User) => {
+        setPasswordModalMode(mode);
+        if (mode === 'linked' && targetUser) {
+            setPasswordTargetUser({
+                id: targetUser.uid,
+                name: targetUser.displayName,
+                role: targetUser.role as 'ALUMNO' | 'PADRE'
+            });
+        } else {
+            setPasswordTargetUser(undefined);
+        }
+        setShowPasswordModal(true);
     };
 
     const openArcade = () => {
@@ -338,14 +365,23 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
                 </div>
 
                 {/* BOTÓN DE ACTUALIZAR MANUAL */}
-                <button
-                    onClick={handleManualRefresh}
-                    disabled={isRefreshing}
-                    className="relative z-20 bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 p-3 rounded-2xl border-2 border-slate-200 hover:border-violet-200 transition-all active:scale-95"
-                    title="Sincronizar Datos"
-                >
-                    <RefreshCw size={24} className={isRefreshing ? 'animate-spin text-violet-500' : ''} strokeWidth={3} />
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => openPasswordModal('self')}
+                        className="relative z-20 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 p-3 rounded-2xl border-2 border-slate-200 hover:border-indigo-200 transition-all active:scale-95"
+                        title="Cambiar Contraseña"
+                    >
+                        <Lock size={24} strokeWidth={3} />
+                    </button>
+                    <button
+                        onClick={handleManualRefresh}
+                        disabled={isRefreshing}
+                        className="relative z-20 bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 p-3 rounded-2xl border-2 border-slate-200 hover:border-violet-200 transition-all active:scale-95"
+                        title="Sincronizar Datos"
+                    >
+                        <RefreshCw size={24} className={isRefreshing ? 'animate-spin text-violet-500' : ''} strokeWidth={3} />
+                    </button>
+                </div>
 
                 <div className="absolute right-0 top-0 w-32 h-32 bg-yellow-100 rounded-full blur-2xl opacity-60 translate-x-10 -translate-y-10 pointer-events-none"></div>
             </div>
@@ -386,6 +422,38 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
             </div>
 
             <div className="grid grid-cols-1"> <button onClick={openGoalsModal} className="bg-indigo-500 hover:bg-indigo-400 active:translate-y-1 active:border-b-0 text-white rounded-[2rem] p-6 border-b-[6px] border-indigo-700 flex flex-row items-center justify-between font-black transition-all shadow-lg shadow-indigo-200 relative overflow-hidden group" > <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div> <div className="flex items-center gap-4 relative z-10"> <div className="bg-white/20 p-3 rounded-2xl group-hover:scale-110 transition-transform"> <Target size={32} strokeWidth={3} /> </div> <div className="text-left"> <span className="text-lg tracking-tight leading-none block">Mis Metas de Ahorro</span> <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Guarda para tus sueños</span> </div> </div> <div className="relative z-10 bg-indigo-800/30 px-3 py-1.5 rounded-lg flex items-center gap-2"> <span className="text-2xl font-black">{goals.length}</span> <Mountain size={20} className="opacity-50" /> </div> <Mountain className="absolute -right-6 -bottom-6 text-indigo-900/20 rotate-12" size={120} /> </button> </div>
+
+            {linkedParents.length > 0 && (
+                <div className="bg-gradient-to-r from-pink-400 to-rose-500 rounded-[2rem] p-5 text-white shadow-lg border-b-[6px] border-rose-700 relative overflow-hidden">
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Lock size={20} className="text-white/80" />
+                            <h3 className="font-black text-white text-sm uppercase tracking-wider">Contraseñas de Familia</h3>
+                        </div>
+                        <p className="text-xs font-bold text-rose-100 mb-3">Puedes cambiar las contraseñas de tus padres</p>
+                        <div className="space-y-2">
+                            {linkedParents.map(parent => (
+                                <button
+                                    key={parent.uid}
+                                    onClick={() => openPasswordModal('linked', parent)}
+                                    className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-sm border-2 border-white/30 rounded-xl p-3 flex items-center justify-between transition-all active:scale-95"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+                                            <Lock size={18} />
+                                        </div>
+                                        <span className="font-bold text-sm">{parent.displayName}</span>
+                                    </div>
+                                    <div className="text-xs font-black bg-white/20 px-3 py-1 rounded-lg">
+                                        Cambiar
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
+                </div>
+            )}
 
             <div className="space-y-6">
                 <div className="bg-slate-800 rounded-[2rem] p-6 text-white relative overflow-hidden shadow-lg border-b-4 border-slate-950">
@@ -603,6 +671,19 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
             {showGoalsModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in"> <div className="bg-indigo-900 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-indigo-500 relative overflow-hidden flex flex-col max-h-[90vh]"> <div className="bg-indigo-800 p-6 text-center relative border-b-4 border-indigo-950"> <button onClick={() => { setShowGoalsModal(false); cancelEditing(); }} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700"> <X size={20} /> </button> <div className="inline-block p-3 bg-indigo-500/20 rounded-2xl backdrop-blur-sm border-2 border-indigo-400/30 mb-2"> <Target size={32} className="text-indigo-200" /> </div> <h3 className="text-xl font-black text-white">Mis Metas</h3> <p className="text-indigo-200 text-xs font-bold mt-1">Visualiza tus objetivos de ahorro</p> </div> <div className="p-6 overflow-y-auto bg-indigo-900 flex-1"> <div className="bg-indigo-950/50 p-4 rounded-2xl border-2 border-indigo-800 mb-6"> <div className="flex justify-between items-center mb-3"> <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest">{editingGoalId ? 'Editar Meta' : 'Nueva Meta'}</h4> {editingGoalId && (<button onClick={cancelEditing} className="text-[10px] font-bold text-indigo-400 hover:text-white bg-indigo-900 px-2 py-1 rounded-lg">Cancelar</button>)} </div> <form onSubmit={handleSaveGoal} className="flex gap-2 items-end"> <div className="flex-1 space-y-2"> <input type="text" value={newGoalTitle} onChange={e => setNewGoalTitle(e.target.value)} placeholder="¿Qué quieres comprar?" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none" /> <div className="relative"> <input type="number" step="0.1" value={newGoalTarget} onChange={e => setNewGoalTarget(e.target.value)} placeholder="Precio" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none pr-8" /> <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">GB</span> </div> </div> <button disabled={isCreatingGoal || !newGoalTitle || !newGoalTarget} className={`h-full text-white p-3 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale ${editingGoalId ? 'bg-amber-500 border-amber-700' : 'bg-emerald-500 border-emerald-700'}`} > {isCreatingGoal ? <RefreshCw className="animate-spin" size={20} /> : editingGoalId ? <Check size={20} strokeWidth={3} /> : <Plus size={20} strokeWidth={3} />} </button> </form> </div> <div className="space-y-4"> {goals.length === 0 ? (<div className="text-center text-indigo-400 text-xs font-bold py-8 border-2 border-dashed border-indigo-800 rounded-2xl"> No tienes metas de ahorro aún. </div>) : (goals.map(goal => { const progress = Math.min((student.balance / goal.targetAmount) * 100, 100); const isComplete = student.balance >= goal.targetAmount; const targetGB = (goal.targetAmount / 100).toFixed(1); const currentGB = (student.balance / 100).toFixed(1); const remaining = Math.max(0, (goal.targetAmount - student.balance) / 100).toFixed(1); return (<div key={goal.id} className={`bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group ${editingGoalId === goal.id ? 'ring-4 ring-amber-400' : ''}`}> {isComplete && (<div className="absolute inset-0 bg-emerald-500/90 z-20 flex flex-col items-center justify-center text-white animate-fade-in"> <PartyPopper size={40} className="animate-bounce mb-2" /> <span className="font-black text-lg uppercase tracking-widest">¡Meta Alcanzada!</span> <p className="text-xs mt-2 opacity-90">Ya tienes suficiente para tu objetivo</p> <button onClick={() => handleDeleteGoal(goal.id)} className="mt-4 bg-white text-emerald-600 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-50 transition-colors" > Marcar como Completada </button> </div>)} <div className="flex justify-between items-start mb-2"> <h4 className="font-black text-slate-800 text-lg">{goal.title}</h4> <div className="flex gap-1"> <button onClick={() => startEditingGoal(goal)} className="text-slate-300 hover:text-amber-500 p-1 bg-slate-50 rounded-lg"><Pencil size={14} /></button> <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1 bg-slate-50 rounded-lg"><X size={14} /></button> </div> </div> <div className="bg-slate-50 rounded-xl p-3 mb-3"> <div className="flex justify-between items-center mb-1"> <span className="text-[10px] font-black text-slate-400 uppercase">Tu Saldo Actual</span> <span className="text-sm font-black text-slate-700 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {currentGB} GB</span> </div> <div className="flex justify-between items-center"> <span className="text-[10px] font-black text-slate-400 uppercase">Meta</span> <span className="text-sm font-black text-indigo-600 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {targetGB} GB</span> </div> </div> <div className="h-6 bg-slate-100 rounded-full overflow-hidden mb-3 border-2 border-slate-200 relative"> <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 transition-all duration-500 relative" style={{ width: `${progress}%` }} > <div className="absolute inset-0 bg-white/20 animate-pulse"></div> </div> <div className="absolute inset-0 flex items-center justify-center"> <span className="text-[10px] font-black text-slate-600 drop-shadow-sm">{Math.round(progress)}%</span> </div> </div> {!isComplete && (<div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-amber-700">Te faltan <span className="text-amber-900">{remaining} GB</span> para tu meta 🎯</p> </div>)} {isComplete && (<div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-emerald-700">¡Ya alcanzaste tu meta! 🎉</p> </div>)} </div>); }))} </div> </div> </div> </div>)}
             {showAvatarModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in"> <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border-4 border-white"> <div className="text-center mb-6"> <h3 className="text-xl font-black text-slate-800">Elige tu Mascota</h3> <p className="text-xs font-bold text-slate-400 uppercase mt-1">¿Quién eres hoy?</p> </div> <div className="grid grid-cols-4 gap-3 mb-6"> {AVATAR_OPTIONS.map(opt => (<button key={opt.url} onClick={() => handleChangeAvatar(opt.url)} className={`rounded-2xl border-4 transition-all relative overflow-hidden aspect-square hover:scale-105 active:scale-95 ${student.avatar === opt.url ? 'border-violet-500 shadow-lg scale-110 bg-violet-50 z-10' : 'border-slate-100 hover:border-violet-200'}`} > <img src={opt.url} className="w-full h-full object-cover" alt={opt.name} /> </button>))} </div> <button onClick={() => setShowAvatarModal(false)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-2xl transition-colors" > Cancelar </button> </div> </div>)}
             {showCelebration && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-fade-in"> <div className="absolute inset-0 overflow-hidden pointer-events-none"> <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div> <div className="absolute top-1/3 right-1/4 w-4 h-4 bg-emerald-400 rounded-full animate-bounce"></div> <div className="absolute bottom-1/3 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-ping delay-75"></div> <div className="absolute top-10 right-10 w-6 h-6 bg-violet-400 rotate-45 animate-pulse"></div> </div> <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 text-center relative overflow-hidden shadow-2xl border-4 border-white animate-bounce-slow"> <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-emerald-100 to-yellow-100 rounded-full blur-3xl opacity-50 animate-spin-slow pointer-events-none"></div> <div className="relative z-10"> <div className="inline-block p-4 bg-yellow-100 text-yellow-500 rounded-full mb-4 shadow-sm animate-bounce"> <PartyPopper size={48} strokeWidth={3} /> </div> <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">¡Misión Cumplida!</h2> <p className="text-slate-500 font-bold mb-6 text-sm">Tus padres y maestra aprobaron:</p> <div className="flex flex-wrap gap-2 justify-center mb-6"> {celebrationData.items.map((item, i) => (<span key={i} className="bg-slate-100 border-2 border-slate-200 px-3 py-1 rounded-xl text-xs font-black text-slate-600 capitalize"> {item} </span>))} </div> <div className="bg-slate-900 text-white rounded-3xl p-6 mb-6 shadow-xl relative overflow-hidden group"> <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-600 opacity-20 group-hover:opacity-30 transition-opacity"></div> <p className="text-emerald-300 text-xs font-black uppercase tracking-widest mb-1">Has Ganado</p> <div className="flex items-center justify-center gap-2"> <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-500 drop-shadow-sm"> +{celebrationData.count} </span> <span className="text-xl font-bold">MB</span> </div> {celebrationData.count >= 100 && (<div className="mt-2 bg-white/10 rounded-lg py-1 px-3 inline-flex items-center gap-2"> <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4 object-contain animate-pulse" /> <span className="text-xs font-bold text-white">¡Eso es +{Math.floor(celebrationData.count / 100)} GemaBit!</span> </div>)} </div> <button onClick={() => setShowCelebration(false)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-4 rounded-2xl border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest text-lg shadow-lg shadow-emerald-200" > ¡Recoger Premio! </button> </div> </div> </div>)}
+
+            <PasswordChangeModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                mode={passwordModalMode}
+                targetUser={passwordTargetUser}
+                currentUserId={student.uid}
+                currentUserRole="ALUMNO"
+                onSuccess={() => {
+                    soundService.playSuccess();
+                    loadLinkedParents();
+                }}
+            />
         </div>
     );
 };

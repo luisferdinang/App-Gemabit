@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mockup Panel de Padres - Gemabit</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-dark: #6d28d9;
+            --secondary: #10b981;
+            --accent: #fbbf24;
+            --rose: #e11d48;
+            --rose-bg: #fff1f2;
+            --slate-50: #f8fafc;
+            --slate-100: #f1f5f9;
+            --slate-200: #e2e8f0;
+            --slate-800: #1e293b;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --white: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--slate-100);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 450px;
+            background: var(--white);
+            border-radius: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            border: 8px solid var(--white);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Nav Header */
+        .header {
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--white);
+        }
+
+        .header h2 {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--slate-800);
+            letter-spacing: -0.5px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-icon {
+            background: var(--slate-50);
+            border: 2px solid var(--slate-100);
+            padding: 0.6rem;
+            border-radius: 1rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        /* Notification Section */
+        .notification-section {
+            margin: 0 1rem 1.5rem;
+            background: var(--rose-bg);
+            border: 2px solid #fecdd3;
+            border-radius: 2rem;
+            padding: 1.25rem;
+        }
+
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 900;
+            color: var(--rose);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .request-card {
+            background: var(--white);
+            border-radius: 1.25rem;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 2px solid var(--slate-100);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .request-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 1rem;
+            background: var(--slate-100);
+            border: 2px solid var(--white);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .request-details p {
+            font-size: 0.85rem;
+            font-weight: 900;
+            color: var(--slate-800);
+        }
+
+        .request-details span {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .amount {
+            font-size: 1.25rem;
+            font-weight: 900;
+            color: var(--rose);
+        }
+
+        /* Main Content */
+        .content {
+            padding: 0 1rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Child Selector / Main Info */
+        .child-card {
+            background: var(--primary);
+            border-radius: 2rem;
+            padding: 1.5rem;
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+        }
+
+        .child-avatar {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 1.25rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .child-info {
+            flex: 1;
+        }
+
+        .child-info h3 {
+            font-size: 1.1rem;
+            font-weight: 900;
+        }
+
+        .child-info p {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            font-weight: 700;
+        }
+
+        /* Wallet Section */
+        .wallet-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .wallet-item {
+            background: var(--slate-50);
+            border: 2px solid var(--slate-100);
+            border-radius: 1.5rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .wallet-label {
+            font-size: 0.65rem;
+            font-weight: 900;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .wallet-value {
+            font-size: 1.25rem;
+            font-weight: 900;
+            color: var(--slate-800);
+        }
+
+        /* History Section */
+        .history-section h4 {
+            font-size: 0.9rem;
+            font-weight: 900;
+            color: var(--slate-800);
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--slate-100);
+        }
+
+        .history-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .history-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .blue {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .green {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .purple {
+            background: #f3e8ff;
+            color: #7e22ce;
+        }
+
+        .history-text p {
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--slate-800);
+        }
+
+        .history-text span {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .history-amount {
+            font-weight: 900;
+            font-size: 0.9rem;
+        }
+
+        .gain {
+            color: var(--secondary);
+        }
+
+        .loss {
+            color: var(--rose);
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 1.25rem;
+            border: none;
+            background: var(--secondary);
+            color: var(--white);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85rem;
+            margin-top: 1rem;
+            box-shadow: 0 4px 0 #059669;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="dashboard">
+        <div class="header">
+            <h2>Panel de Padres</h2>
+            <div class="header-actions">
+                <div class="btn-icon"><i data-lucide="refresh-cw"></i></div>
+                <div class="btn-icon"><i data-lucide="plus"></i></div>
+            </div>
+        </div>
+
+        <!-- Notification section: Pending Authorization -->
+        <div class="notification-section">
+            <div class="section-title">
+                <i data-lucide="alert-triangle" style="width: 16px;"></i> Solicitudes Pendientes
+            </div>
+            <div class="request-card">
+                <div class="request-info">
+                    <img src="https://api.dicebear.com/9.x/bottts/svg?seed=Gizmo" class="avatar" alt="Alumno">
+                    <div class="request-details">
+                        <p>Luis Ferdinando</p>
+                        <span>Desea: Helado Gigante</span>
+                    </div>
+                </div>
+                <div class="amount">-150</div>
+            </div>
+            <button class="btn-action">Aprobar Todo</button>
+        </div>
+
+        <div class="content">
+            <!-- Child Selector Card -->
+            <div class="child-card">
+                <div class="child-avatar">🤖</div>
+                <div class="child-info">
+                    <h3>Luis Ferdinando</h3>
+                    <p>Primaria - 4to Grado</p>
+                </div>
+                <i data-lucide="chevron-down"></i>
+            </div>
+
+            <!-- Wallet Overview -->
+            <div class="wallet-grid">
+                <div class="wallet-item">
+                    <div class="wallet-label">GemaBits Acumulados</div>
+                    <div class="wallet-value">💎 825</div>
+                </div>
+                <div class="wallet-item">
+                    <div class="wallet-label">Valor Estimado</div>
+                    <div class="wallet-value">💵 $8.25</div>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div class="history-section">
+                <h4>Actividad Reciente <i data-lucide="history" style="width: 16px;"></i></h4>
+                <div class="history-list">
+                    <div class="history-item">
+                        <div class="history-meta">
+                            <div class="history-icon purple"><i data-lucide="school" style="width: 16px;"></i></div>
+                            <div class="history-text">
+                                <p>Semana Escolar Exitosa</p>
+                                <span>Ayer, 04:30 PM</span>
+                            </div>
+                        </div>
+                        <div class="history-amount gain">+250</div>
+                    </div>
+
+                    <div class="history-item">
+                        <div class="history-meta">
+                            <div class="history-icon blue"><i data-lucide="gamepad-2" style="width: 16px;"></i></div>
+                            <div class="history-text">
+                                <p>Premio Arcade: Super Gema</p>
+                                <span>Lunes, 10:15 AM</span>
+                            </div>
+                        </div>
+                        <div class="history-amount gain">+50</div>
+                    </div>
+
+                    <div class="history-item">
+                        <div class="history-meta">
+                            <div class="history-icon green"><i data-lucide="home" style="width: 16px;"></i></div>
+                            <div class="history-text">
+                                <p>Tarea de Casa Aprobada</p>
+                                <span>Hoy, 08:00 AM</span>
+                            </div>
+                        </div>
+                        <div class="history-amount gain">+25</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

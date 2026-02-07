@@ -214,6 +214,80 @@ export const supabaseService = {
     return { success: true };
   },
 
+  changeLinkedUserPassword: async (
+    currentUserId: string,
+    targetUserId: string,
+    newPassword: string,
+    currentUserRole: 'ALUMNO' | 'PADRE'
+  ): Promise<{ success: boolean, error?: string }> => {
+    try {
+      // Validar que los usuarios estén vinculados
+      const { data: currentUser } = await supabase
+        .from('profiles')
+        .select('link_code')
+        .eq('id', currentUserId)
+        .single();
+
+      const { data: targetUser } = await supabase
+        .from('profiles')
+        .select('link_code, role')
+        .eq('id', targetUserId)
+        .single();
+
+      if (!currentUser || !targetUser) {
+        return { success: false, error: 'Usuario no encontrado' };
+      }
+
+      // Validar la relación según el rol
+      let isLinked = false;
+
+      if (currentUserRole === 'ALUMNO') {
+        // El alumno solo puede cambiar contraseñas de padres vinculados a él
+        if (targetUser.role !== 'PADRE') {
+          return { success: false, error: 'Solo puedes cambiar contraseñas de tus padres' };
+        }
+        // Verificar que el padre esté vinculado al alumno
+        const { data: parentLink } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', targetUserId)
+          .eq('link_code', currentUser.link_code)
+          .single();
+
+        isLinked = !!parentLink;
+      } else if (currentUserRole === 'PADRE') {
+        // El padre solo puede cambiar contraseñas de hijos vinculados a él
+        if (targetUser.role !== 'ALUMNO') {
+          return { success: false, error: 'Solo puedes cambiar contraseñas de tus hijos' };
+        }
+        // Verificar que el hijo esté vinculado al padre
+        const { data: childLink } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', targetUserId)
+          .eq('link_code', currentUser.link_code)
+          .single();
+
+        isLinked = !!childLink;
+      }
+
+      if (!isLinked) {
+        return { success: false, error: 'No tienes permiso para cambiar esta contraseña' };
+      }
+
+      // Cambiar la contraseña usando la función RPC
+      const { error } = await supabase.rpc('reset_user_password', {
+        user_id: targetUserId,
+        new_password: newPassword
+      });
+
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  },
+
   resetSystemData: async (adminUid: string): Promise<{ success: boolean, error?: string }> => {
     try {
       const zeroUuid = '00000000-0000-0000-0000-000000000000';
@@ -299,6 +373,37 @@ export const supabaseService = {
       .from('profiles')
       .select('*')
       .eq('role', 'ALUMNO')
+      .eq('status', 'APPROVED')
+      .neq('status', 'DELETED')
+      .neq('status', 'DELETED_ARCHIVE');
+    return (data || []).map(mapProfileToUser);
+  },
+
+  getLinkedParents: async (studentId: string): Promise<User[]> => {
+    // Get student's link_code
+    const { data: student } = await supabase
+      .from('profiles')
+      .select('link_code')
+      .eq('id', studentId)
+      .single();
+
+    if (!student || !student.link_code) return [];
+
+    // Get parents with the same link_code
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'PADRE')
+      .eq('link_code', student.link_code);
+
+    return (data || []).map(mapProfileToUser);
+  },
+
+  getParents: async (): Promise<User[]> => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'PADRE')
       .eq('status', 'APPROVED')
       .neq('status', 'DELETED')
       .neq('status', 'DELETED_ARCHIVE');
