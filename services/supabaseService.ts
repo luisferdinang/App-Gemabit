@@ -493,6 +493,20 @@ export const supabaseService = {
     }
   },
 
+  deleteParent: async (uid: string): Promise<{ success: boolean, error?: string }> => {
+    try {
+      // Parents don't have secondary data like tasks or transactions in current schema
+      const { error: hardError } = await supabase.from('profiles').delete().eq('id', uid);
+      if (!hardError) return { success: true };
+
+      const { error: softError } = await supabase.from('profiles').update({ status: 'DELETED' }).eq('id', uid);
+      if (softError) return { success: false, error: softError.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: `EXCEPTION: ${e.message}` };
+    }
+  },
+
   updateAvatar: async (uid: string, newAvatarUrl: string) => {
     const { error } = await supabase.from('profiles').update({ avatar_url: newAvatarUrl }).eq('id', uid);
     return !error;
