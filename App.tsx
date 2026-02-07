@@ -113,6 +113,11 @@ export default function App() {
   };
 
   if (loading) {
+    // Safety check: force clear loading after 7s to prevent eternal spinner
+    setTimeout(() => {
+      if (loading) setLoading(false);
+    }, 7000);
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
         <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center animate-bounce-slow">
