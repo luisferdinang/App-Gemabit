@@ -244,6 +244,8 @@ export const supabaseService = {
 
   logout: async () => {
     await supabase.auth.signOut();
+    localStorage.clear(); // Force clear all local storage
+    window.location.reload(); // Force reload to clear in-memory state
   },
 
   updatePassword: async (newPassword: string): Promise<{ success: boolean, error?: string }> => {
