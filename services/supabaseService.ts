@@ -243,9 +243,31 @@ export const supabaseService = {
   },
 
   logout: async () => {
-    await supabase.auth.signOut();
-    localStorage.clear(); // Force clear all local storage
-    window.location.reload(); // Force reload to clear in-memory state
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("Supabase signOut error:", e);
+    }
+
+    // 1. Limpieza Local
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 2. Limpieza Service Worker y Cachés
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+    }
+
+    // 3. Recarga forzada a la raíz
+    window.location.href = window.location.origin;
   },
 
   updatePassword: async (newPassword: string): Promise<{ success: boolean, error?: string }> => {

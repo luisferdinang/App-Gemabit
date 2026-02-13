@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gemabit-v3';
+const CACHE_NAME = 'gemabit-v4-hotfix-session';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,22 +28,43 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Ignorar peticiones que no sean GET o que sean para Supabase (Auth/API)
-  if (event.request.method !== 'GET' || event.request.url.includes('supabase.co')) {
+  const url = new URL(event.request.url);
+
+  // 1. Ignorar peticiones que no sean GET, que sean para Supabase, o que no sean http/https (extensiones)
+  if (event.request.method !== 'GET' || url.hostname.includes('supabase.co') || !url.protocol.startsWith('http')) {
     return;
   }
 
-  // Estrategia: Stale-While-Revalidate
-  // 1. Responder inmediatamente desde caché (si existe)
-  // 2. En paralelo, buscar versión nueva en red y actualizar caché
+  // ... (Asset caching remains the same) ...
+
+  // 3. Network-First para navegación (HTML)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then(networkResponse => {
+        // Clonar la respuesta ANTES de consumirla
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseToCache);
+        });
+        return networkResponse;
+      }).catch(() => {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // 4. Stale-While-Revalidate para otros recursos
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
       const fetchPromise = fetch(event.request).then(networkResponse => {
+        // Clonar la respuesta ANTES de consumirla
+        const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, networkResponse.clone());
+          cache.put(event.request, responseToCache);
         });
         return networkResponse;
-      });
+      }).catch(err => console.log("Fetch failed, using cache", err));
 
       return cachedResponse || fetchPromise;
     })
