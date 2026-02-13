@@ -156,7 +156,7 @@ export default function App() {
   };
 
   // Reusable loading component with Emergency Reset Button
-  const LoadingScreen = ({ onReset }: { onReset: () => void }) => {
+  const LoadingScreen = () => {
     const [showReset, setShowReset] = useState(false);
 
     useEffect(() => {
@@ -179,7 +179,7 @@ export default function App() {
           {showReset && (
             <button
               onClick={() => {
-                onReset();
+                handleEmergencyReset();
                 window.location.reload();
               }}
               className="px-4 py-2 bg-red-100 text-red-600 rounded-full text-xs font-bold hover:bg-red-200 transition-colors animate-pulse"
@@ -193,7 +193,7 @@ export default function App() {
   };
 
   if (loading) {
-    return <LoadingScreen onReset={handleEmergencyReset} />;
+    return <LoadingScreen />;
   }
 
   if (!currentUser) {
