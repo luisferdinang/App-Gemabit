@@ -1612,6 +1612,57 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
         </div>
       )}
 
+      {/* MODAL VER LISTA DE COMPLETADOS (NEW) */}
+      {quizCompletionsView && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[150] backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full p-6 shadow-2xl border-4 border-violet-100 relative max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+                <div className="p-2 bg-violet-100 text-violet-600 rounded-xl"><Trophy size={20} /></div>
+                Ganadores
+              </h3>
+              <button onClick={() => setQuizCompletionsView(null)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 mb-4 border-2 border-slate-100">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Misión</p>
+              <p className="font-black text-slate-700 line-clamp-2 text-sm">
+                {teacherQuizzes.find(q => q.id === quizCompletionsView)?.question}
+              </p>
+            </div>
+
+            <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
+              {allQuizResults.filter(r => r.quizId === quizCompletionsView).length === 0 ? (
+                <div className="text-center py-8 opacity-50 font-bold text-sm">Nadie aún</div>
+              ) : (
+                <div className="space-y-2">
+                  {allQuizResults.filter(r => r.quizId === quizCompletionsView).map((result, idx) => {
+                    // Filter duplicates if any, though map index is key for simple display
+                    const st = students.find(s => s.uid === result.studentId);
+                    if (!st) return null;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl shadow-sm">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
+                          <img src={st.avatar} className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-700 text-xs">{st.displayName}</p>
+                          <p className="text-[10px] font-bold text-emerald-500 flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Completado
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE CAMBIO DE CONTRASEÑA PARA PADRES */}
       <PasswordChangeModal
         isOpen={showPasswordModal}
