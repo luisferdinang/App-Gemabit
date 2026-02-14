@@ -18,6 +18,25 @@ export const getCurrentWeekId = () => {
   return `${date.getFullYear()}-W${weekNo}`;
 };
 
+// Helper to get week start timestamp (Monday 00:00:00)
+export const getWeekStartTimestamp = (weekId: string): number => {
+  const [year, week] = weekId.split('-W').map(Number);
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const weekOneMonday = new Date(year, 0, 4 - jan4Day + 1);
+  const targetMonday = new Date(weekOneMonday.getTime());
+  targetMonday.setDate(weekOneMonday.getDate() + (week - 1) * 7);
+  targetMonday.setHours(0, 0, 0, 0);
+  return targetMonday.getTime();
+};
+
+// Helper to get week end timestamp (Sunday 23:59:59.999)
+export const getWeekEndTimestamp = (weekId: string): number => {
+  const startTime = getWeekStartTimestamp(weekId);
+  return startTime + (7 * 24 * 60 * 60 * 1000) - 1;
+};
+
+
 // Helper to map DB profile to User Type
 export const mapProfileToUser = (profile: any): User => ({
   uid: profile.id,
@@ -655,35 +674,71 @@ export const supabaseService = {
     return Array.from(weeksMap.entries()).map(([weekId, completion]) => ({ weekId, completion })).sort((a, b) => b.weekId.localeCompare(a.weekId));
   },
 
-  updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()) => {
+  updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()): Promise<{ success: boolean, error?: string, weeklyUsed?: number }> => {
     const { data: tasks } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId).eq('type', type);
     const task = tasks?.[0];
 
-    if (task) {
-      if (task.status[key] === value) return false;
+    if (!task) return { success: false, error: 'Tarea no encontrada' };
+    if (task.status[key] === value) return { success: false, error: 'Sin cambios' };
 
-      const newStatus = { ...task.status, [key]: value };
-      await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
+    const reward = type === 'SCHOOL' ? 20 : 25;
+    const change = value ? reward : -reward;
 
-      const reward = type === 'SCHOOL' ? 20 : 25;
-      const change = value ? reward : -reward;
+    // Si estamos AÑADIENDO puntos (value = true), verificar límite semanal
+    if (value) {
+      const weekStart = getWeekStartTimestamp(weekId);
+      const weekEnd = getWeekEndTimestamp(weekId);
 
-      const label = TASK_NAMES[key] || key;
+      // Obtener todas las transacciones de ganancia de esta semana para este estudiante
+      const { data: transactions } = await supabase
+        .from('transactions')
+        .select('amount, description')
+        .eq('student_id', studentId)
+        .eq('type', 'EARN')
+        .gte('timestamp', weekStart)
+        .lte('timestamp', weekEnd);
 
-      const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
-      if (student) {
-        await supabase.from('profiles').update({ balance: student.balance + change }).eq('id', studentId);
-        await supabase.from('transactions').insert({
-          student_id: studentId,
-          amount: change,
-          description: value ? `Tarea: ${label}` : `Revocada: ${label}`,
-          type: change > 0 ? 'EARN' : 'SPEND',
-          timestamp: Date.now()
-        });
+      // Lista de tareas escolares para filtrar
+      const schoolTasks = ['Asistencia', 'Responsabilidad', 'Comportamiento', 'Respeto', 'Participación'];
+
+      // Calcular total ganado en la semana para este tipo específico
+      const weeklyEarned = (transactions || [])
+        .filter(t => {
+          const isSchoolTask = schoolTasks.some(task => t.description.includes(task));
+          return type === 'SCHOOL' ? isSchoolTask : !isSchoolTask;
+        })
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const WEEKLY_LIMIT = 100; // 100 MB por semana por tipo
+
+      if (weeklyEarned + reward > WEEKLY_LIMIT) {
+        const remaining = WEEKLY_LIMIT - weeklyEarned;
+        return {
+          success: false,
+          error: `Límite semanal alcanzado. Ya se asignaron ${weeklyEarned} MB de ${WEEKLY_LIMIT} MB esta semana. Solo quedan ${remaining} MB disponibles.`,
+          weeklyUsed: weeklyEarned
+        };
       }
-      return true;
     }
-    return false;
+
+    // Proceder con la asignación
+    const newStatus = { ...task.status, [key]: value };
+    await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
+
+    const label = TASK_NAMES[key] || key;
+
+    const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
+    if (student) {
+      await supabase.from('profiles').update({ balance: student.balance + change }).eq('id', studentId);
+      await supabase.from('transactions').insert({
+        student_id: studentId,
+        amount: change,
+        description: value ? `Tarea: ${label}` : `Revocada: ${label}`,
+        type: change > 0 ? 'EARN' : 'SPEND',
+        timestamp: Date.now()
+      });
+    }
+    return { success: true };
   },
 
   getClassReport: async (): Promise<StudentReport[]> => {
