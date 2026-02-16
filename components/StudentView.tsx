@@ -322,6 +322,41 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
         }
     };
 
+    const handleQuizSuccess = async () => {
+        if (!activeQuiz) return;
+        soundService.playCoin();
+        await supabaseService.submitQuiz(student.uid, activeQuiz.id, activeQuiz.question, 100, activeQuiz.reward);
+        alert(`¡Correcto! 🎉\nGanaste ${activeQuiz.reward} MB. Ahora está en tu bolsa.`);
+        setActiveQuiz(null);
+        loadQuizData();
+    };
+
+    const handleCashOut = async () => {
+        if (bagBalance === 0) return;
+        setCashingOut(true);
+        const result = await supabaseService.cashOutQuizEarnings(student.uid);
+        setCashingOut(false);
+        if (result.success) {
+            soundService.playCelebration();
+            alert(`¡Cobrado! 💰\n+${bagBalance} MB añadidos a tu billetera.`);
+            loadQuizData();
+            refreshUser();
+        } else {
+            alert('Error: ' + result.error);
+        }
+    };
+
+    const handleChangeAvatar = async (avatarUrl: string) => {
+        const result = await supabaseService.updateAvatar(student.uid, avatarUrl);
+        if (result.success) {
+            soundService.playPop();
+            setShowAvatarModal(false);
+            refreshUser();
+        } else {
+            alert('Error: ' + result.error);
+        }
+    };
+
     const gems = Math.floor(student.balance / 100);
     const minibits = student.balance % 100;
     const streakPercent = Math.min((student.streakWeeks / 4) * 100, 100);
@@ -609,115 +644,115 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
                 return (<button key={quiz.id} onClick={() => !isPlayed && setActiveQuiz(quiz)} disabled={isPlayed} className={`w-full text-left bg-white rounded-3xl p-5 relative overflow-hidden group shadow-lg flex gap-4 items-center transition-all ${isPlayed ? 'opacity-80 grayscale' : 'hover:scale-[1.02]'}`} > <div className={`w-16 h-16 rounded-2xl ${visuals.light} ${visuals.text} flex items-center justify-center shrink-0 border-2 ${visuals.border}`}> {visuals.icon} </div> <div className="relative z-10 flex-1"> <div className="flex justify-between items-start mb-1"> <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${visuals.light} ${visuals.text} border ${visuals.border}`}> {visuals.label} </span> <div className={`flex items-center gap-1 px-2 py-1 rounded-lg font-black text-xs shadow-sm ${isFailed ? 'bg-slate-200 text-slate-600' : isPlayed ? 'bg-emerald-400 text-white' : 'bg-yellow-400 text-yellow-900'}`}> {isFailed ? 'FALLIDO' : isPlayed ? 'COMPLETADO' : <><div className="w-2 h-2 rounded-full bg-yellow-900/50"></div> +{quiz.reward} MB</>} </div> </div> <h4 className="text-slate-800 font-black text-base leading-tight pr-2 line-clamp-2">{quiz.question}</h4> </div> <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-100 to-transparent opacity-50"></div> </button>);
             }))} </div> {completedQuizzes.length > 0 && (<div className="space-y-4"> <div className="flex items-center justify-between"> <h3 className="text-lg font-black flex items-center gap-2 text-emerald-400"> <CheckCircle2 size={20} /> Historial </h3> <span className="text-xs font-bold text-slate-500 bg-white/10 px-2 py-1 rounded-lg"> Total Ganado: +{totalQuizEarnings + pendingQuizEarnings} MB </span> </div> <div className="space-y-3"> {completedQuizzes.map((result, idx) => { const isPending = result.status === 'PENDING'; const isInBag = result.status === 'IN_BAG'; const isApproved = result.status === 'APPROVED'; const isFailed = result.score === 0; return (<div key={idx} className={`rounded-2xl p-4 flex items-center justify-between border border-white/5 ${isFailed ? 'bg-red-500/10' : 'bg-slate-800/50'}`}> <div className="flex items-center gap-4"> <div className={`p-3 rounded-xl ${isApproved ? 'bg-emerald-500/20 text-emerald-400' : ''} ${isPending ? 'bg-amber-500/20 text-amber-400' : ''} ${isInBag ? 'bg-sky-500/20 text-sky-400' : ''} ${isFailed ? 'bg-red-500/20 text-red-400' : ''}`}> {isFailed ? <X size={20} /> : isApproved ? <CheckCircle2 size={20} /> : <Clock size={20} />} </div> <div> <p className="font-bold text-slate-200 text-sm line-clamp-1">{result.questionPreview}</p> <div className="flex items-center gap-2 mt-1"> <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isApproved ? 'bg-emerald-500/10 text-emerald-300' : ''} ${isPending ? 'bg-amber-500/10 text-amber-300' : ''} ${isInBag ? 'bg-sky-500/10 text-sky-300' : ''} ${isFailed ? 'bg-red-500/10 text-red-300' : ''}`}> {isFailed && 'Fallido (0 PT)'} {isApproved && 'Cobrado'} {isPending && 'Enviado a Maestra'} {isInBag && 'En Bolsa (Sin cobrar)'} </span> </div> </div> </div> <div className={`font-black whitespace-nowrap flex items-center gap-1 ${isFailed ? 'text-slate-500 line-through opacity-50' : 'text-white'}`}> <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-4 h-4 object-contain" /> +{result.earned} MB </div> </div>); })} </div> </div>)} </div>) : (<div className="flex flex-col h-full justify-center max-w-md mx-auto w-full"> <div className="bg-white rounded-[2.5rem] p-8 text-slate-800 shadow-2xl relative overflow-hidden"> <button onClick={() => setActiveQuiz(null)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 z-50"> <X size={20} /> </button> <div className="text-center mb-6"> {(() => { const visuals = getGameTypeStyles(activeQuiz.type); return (<> <div className={`inline-flex items-center gap-2 ${visuals.light} ${visuals.text} px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest border-2 ${visuals.border}`}> {visuals.icon} {visuals.label} </div> </>) })()} <h3 className="text-2xl font-black mt-4 leading-tight">{activeQuiz.question}</h3> </div> {renderActiveGame()} <div className="flex justify-center mt-6"> <div className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2"> <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div> Premio: {activeQuiz.reward} MB </div> </div> </div> </div>)} </div>)}
 
-                {/* MODAL DE GASTOS CON CONVERSIÓN DE DIVISAS */}
-                {showExpenseModal && (
-                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
-                        <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-white relative overflow-hidden flex flex-col max-h-[90vh]">
-                            <div className="bg-rose-500 p-6 text-center relative border-b-4 border-rose-600">
-                                <button onClick={() => setShowExpenseModal(false)} className="absolute top-4 right-4 p-2 bg-rose-600 rounded-full text-rose-100 hover:bg-rose-700 transition-colors"> <X size={20} /> </button>
-                                <div className="inline-block p-3 bg-white/20 rounded-2xl backdrop-blur-sm border-2 border-white/30 mb-2"> <ShoppingBag size={32} className="text-white" /> </div>
-                                <h3 className="text-xl font-black text-white">Solicitar Gasto</h3>
-                                <p className="text-rose-100 text-xs font-bold mt-1">Pide permiso a tus padres</p>
+            {/* MODAL DE GASTOS CON CONVERSIÓN DE DIVISAS */}
+            {showExpenseModal && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-white relative overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="bg-rose-500 p-6 text-center relative border-b-4 border-rose-600">
+                            <button onClick={() => setShowExpenseModal(false)} className="absolute top-4 right-4 p-2 bg-rose-600 rounded-full text-rose-100 hover:bg-rose-700 transition-colors"> <X size={20} /> </button>
+                            <div className="inline-block p-3 bg-white/20 rounded-2xl backdrop-blur-sm border-2 border-white/30 mb-2"> <ShoppingBag size={32} className="text-white" /> </div>
+                            <h3 className="text-xl font-black text-white">Solicitar Gasto</h3>
+                            <p className="text-rose-100 text-xs font-bold mt-1">Pide permiso a tus padres</p>
+                        </div>
+                        <div className="p-6 overflow-y-auto">
+                            {/* SALDO ACTUAL */}
+                            <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-6 flex justify-between items-center">
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Disponible</span>
+                                <span className="text-xl font-black text-slate-700 flex items-center gap-1">
+                                    <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-5 h-5" /> {student.balance}
+                                </span>
                             </div>
-                            <div className="p-6 overflow-y-auto">
-                                {/* SALDO ACTUAL */}
-                                <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-6 flex justify-between items-center">
-                                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Disponible</span>
-                                    <span className="text-xl font-black text-slate-700 flex items-center gap-1">
-                                        <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-5 h-5" /> {student.balance}
-                                    </span>
+
+                            <form onSubmit={handleExpenseRequest} className="space-y-4 mb-8">
+
+                                {/* SELECTOR DE MONEDA */}
+                                <div className="flex gap-2 mb-2">
+                                    {['MB', 'USD', 'VES'].map((curr) => (
+                                        <button
+                                            key={curr}
+                                            type="button"
+                                            onClick={() => setExpenseCurrency(curr as any)}
+                                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${expenseCurrency === curr
+                                                ? 'bg-slate-800 text-white border-slate-900 shadow-md'
+                                                : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            {curr === 'MB' ? 'MiniBits' : curr === 'USD' ? 'Dólares' : 'Bolívares'}
+                                        </button>
+                                    ))}
                                 </div>
 
-                                <form onSubmit={handleExpenseRequest} className="space-y-4 mb-8">
-
-                                    {/* SELECTOR DE MONEDA */}
-                                    <div className="flex gap-2 mb-2">
-                                        {['MB', 'USD', 'VES'].map((curr) => (
-                                            <button
-                                                key={curr}
-                                                type="button"
-                                                onClick={() => setExpenseCurrency(curr as any)}
-                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${expenseCurrency === curr
-                                                    ? 'bg-slate-800 text-white border-slate-900 shadow-md'
-                                                    : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'
-                                                    }`}
-                                            >
-                                                {curr === 'MB' ? 'MiniBits' : curr === 'USD' ? 'Dólares' : 'Bolívares'}
-                                            </button>
-                                        ))}
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">
+                                        Costo en {expenseCurrency === 'MB' ? 'MiniBits' : expenseCurrency === 'USD' ? 'Dólares ($)' : 'Bolívares (Bs)'}
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step={expenseCurrency === 'MB' ? "1" : "0.01"}
+                                            value={expenseAmount}
+                                            onChange={e => setExpenseAmount(e.target.value)}
+                                            placeholder="0"
+                                            className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-2xl text-slate-700 focus:border-rose-400 outline-none transition-all pr-12"
+                                        />
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300">
+                                            {expenseCurrency}
+                                        </span>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">
-                                            Costo en {expenseCurrency === 'MB' ? 'MiniBits' : expenseCurrency === 'USD' ? 'Dólares ($)' : 'Bolívares (Bs)'}
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                step={expenseCurrency === 'MB' ? "1" : "0.01"}
-                                                value={expenseAmount}
-                                                onChange={e => setExpenseAmount(e.target.value)}
-                                                placeholder="0"
-                                                className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-black text-2xl text-slate-700 focus:border-rose-400 outline-none transition-all pr-12"
-                                            />
-                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300">
-                                                {expenseCurrency}
+                                    {/* CALCULADORA DE CONVERSIÓN VISUAL */}
+                                    {expenseCurrency !== 'MB' && parseFloat(expenseAmount) > 0 && (
+                                        <div className="mt-2 bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500 animate-fade-in">
+                                            <span className="flex items-center gap-1"><Calculator size={14} /> Costo en Monedas:</span>
+                                            <span className="text-rose-500 font-black text-sm flex items-center gap-1">
+                                                {calculateFinalMBAmount()} MB <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3" />
                                             </span>
                                         </div>
-
-                                        {/* CALCULADORA DE CONVERSIÓN VISUAL */}
-                                        {expenseCurrency !== 'MB' && parseFloat(expenseAmount) > 0 && (
-                                            <div className="mt-2 bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500 animate-fade-in">
-                                                <span className="flex items-center gap-1"><Calculator size={14} /> Costo en Monedas:</span>
-                                                <span className="text-rose-500 font-black text-sm flex items-center gap-1">
-                                                    {calculateFinalMBAmount()} MB <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3" />
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">¿En qué?</label>
-                                        <input type="text" value={expenseReason} onChange={e => setExpenseReason(e.target.value)} placeholder="Ej. Helado, Juguete..." className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-sm text-slate-700 focus:border-rose-400 outline-none transition-all" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 pl-2">Tipo de Gasto</label>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button type="button" onClick={() => setExpenseCategory('NEED')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'NEED' ? 'bg-emerald-100 border-emerald-400 text-emerald-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`} > <Heart size={24} className={expenseCategory === 'NEED' ? 'fill-emerald-500' : ''} /> <span className="text-[10px] font-black uppercase">Lo Necesito</span> </button>
-                                            <button type="button" onClick={() => setExpenseCategory('WANT')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'WANT' ? 'bg-pink-100 border-pink-400 text-pink-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`} > <Star size={24} className={expenseCategory === 'WANT' ? 'fill-pink-500' : ''} /> <span className="text-[10px] font-black uppercase">Lo Quiero</span> </button>
-                                        </div>
-                                    </div>
-
-                                    <button disabled={submittingExpense || !expenseAmount || !expenseReason} className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-rose-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-100 disabled:opacity-50" > {submittingExpense ? <RefreshCw className="animate-spin" /> : 'Pedir Permiso'} </button>
-                                </form>
-
-                                {/* HISTORIAL */}
-                                <div>
-                                    <h4 className="font-black text-slate-700 mb-3 flex items-center gap-2 text-sm"> <Clock size={16} className="text-slate-400" /> Historial de Solicitudes </h4>
-                                    {expenseHistory.length === 0 ? (<p className="text-center text-xs font-bold text-slate-400 py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No hay solicitudes recientes.</p>) : (<div className="space-y-3"> {expenseHistory.map(req => (<div key={req.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-2"> <div className="flex items-center justify-between"> <div> <p className="font-bold text-slate-700 text-xs">{req.description}</p> <div className="flex items-center gap-2 mt-1"> <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : ''} ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : ''} ${req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' : ''} `}> {req.status === 'APPROVED' ? 'Aprobado' : req.status === 'PENDING' ? 'Esperando' : 'Rechazado'} </span> {req.category === 'NEED' && <Heart size={12} className="text-emerald-400 fill-emerald-400" />} {req.category === 'WANT' && <Star size={12} className="text-pink-400 fill-pink-400" />} </div> </div> <span className="font-black text-slate-800 text-sm">-{req.amount} MB</span> </div> {req.status === 'APPROVED' && (<div className="border-t border-slate-50 pt-2 flex items-center justify-between"> <span className="text-[9px] font-bold text-slate-400">¿Cómo te sientes?</span> <div className="flex gap-2"> <button onClick={() => handleSentiment(req.id, 'HAPPY')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'HAPPY' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <SmilePlus size={18} className="text-emerald-500" /> </button> <button onClick={() => handleSentiment(req.id, 'NEUTRAL')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'NEUTRAL' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <Meh size={18} className="text-amber-500" /> </button> <button onClick={() => handleSentiment(req.id, 'SAD')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'SAD' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <Frown size={18} className="text-rose-500" /> </button> </div> </div>)} </div>))} </div>)}
+                                    )}
                                 </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 pl-2">¿En qué?</label>
+                                    <input type="text" value={expenseReason} onChange={e => setExpenseReason(e.target.value)} placeholder="Ej. Helado, Juguete..." className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 font-bold text-sm text-slate-700 focus:border-rose-400 outline-none transition-all" />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 pl-2">Tipo de Gasto</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button type="button" onClick={() => setExpenseCategory('NEED')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'NEED' ? 'bg-emerald-100 border-emerald-400 text-emerald-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`} > <Heart size={24} className={expenseCategory === 'NEED' ? 'fill-emerald-500' : ''} /> <span className="text-[10px] font-black uppercase">Lo Necesito</span> </button>
+                                        <button type="button" onClick={() => setExpenseCategory('WANT')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${expenseCategory === 'WANT' ? 'bg-pink-100 border-pink-400 text-pink-700 scale-105 shadow-sm' : 'bg-white border-slate-200 text-slate-400 opacity-70'}`} > <Star size={24} className={expenseCategory === 'WANT' ? 'fill-pink-500' : ''} /> <span className="text-[10px] font-black uppercase">Lo Quiero</span> </button>
+                                    </div>
+                                </div>
+
+                                <button disabled={submittingExpense || !expenseAmount || !expenseReason} className="w-full bg-rose-500 text-white font-black py-4 rounded-2xl border-b-[6px] border-rose-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-100 disabled:opacity-50" > {submittingExpense ? <RefreshCw className="animate-spin" /> : 'Pedir Permiso'} </button>
+                            </form>
+
+                            {/* HISTORIAL */}
+                            <div>
+                                <h4 className="font-black text-slate-700 mb-3 flex items-center gap-2 text-sm"> <Clock size={16} className="text-slate-400" /> Historial de Solicitudes </h4>
+                                {expenseHistory.length === 0 ? (<p className="text-center text-xs font-bold text-slate-400 py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No hay solicitudes recientes.</p>) : (<div className="space-y-3"> {expenseHistory.map(req => (<div key={req.id} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-2"> <div className="flex items-center justify-between"> <div> <p className="font-bold text-slate-700 text-xs">{req.description}</p> <div className="flex items-center gap-2 mt-1"> <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : ''} ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : ''} ${req.status === 'REJECTED' ? 'bg-rose-100 text-rose-700' : ''} `}> {req.status === 'APPROVED' ? 'Aprobado' : req.status === 'PENDING' ? 'Esperando' : 'Rechazado'} </span> {req.category === 'NEED' && <Heart size={12} className="text-emerald-400 fill-emerald-400" />} {req.category === 'WANT' && <Star size={12} className="text-pink-400 fill-pink-400" />} </div> </div> <span className="font-black text-slate-800 text-sm">-{req.amount} MB</span> </div> {req.status === 'APPROVED' && (<div className="border-t border-slate-50 pt-2 flex items-center justify-between"> <span className="text-[9px] font-bold text-slate-400">¿Cómo te sientes?</span> <div className="flex gap-2"> <button onClick={() => handleSentiment(req.id, 'HAPPY')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'HAPPY' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <SmilePlus size={18} className="text-emerald-500" /> </button> <button onClick={() => handleSentiment(req.id, 'NEUTRAL')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'NEUTRAL' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <Meh size={18} className="text-amber-500" /> </button> <button onClick={() => handleSentiment(req.id, 'SAD')} className={`p-1 rounded-lg hover:bg-slate-50 transition-colors ${req.sentiment === 'SAD' ? 'scale-125 drop-shadow-sm' : req.sentiment ? 'opacity-30' : ''}`} > <Frown size={18} className="text-rose-500" /> </button> </div> </div>)} </div>))} </div>)}
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                {showGoalsModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in"> <div className="bg-indigo-900 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-indigo-500 relative overflow-hidden flex flex-col max-h-[90vh]"> <div className="bg-indigo-800 p-6 text-center relative border-b-4 border-indigo-950"> <button onClick={() => { setShowGoalsModal(false); cancelEditing(); }} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700"> <X size={20} /> </button> <div className="inline-block p-3 bg-indigo-500/20 rounded-2xl backdrop-blur-sm border-2 border-indigo-400/30 mb-2"> <Target size={32} className="text-indigo-200" /> </div> <h3 className="text-xl font-black text-white">Mis Metas</h3> <p className="text-indigo-200 text-xs font-bold mt-1">Visualiza tus objetivos de ahorro</p> </div> <div className="p-6 overflow-y-auto bg-indigo-900 flex-1"> <div className="bg-indigo-950/50 p-4 rounded-2xl border-2 border-indigo-800 mb-6"> <div className="flex justify-between items-center mb-3"> <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest">{editingGoalId ? 'Editar Meta' : 'Nueva Meta'}</h4> {editingGoalId && (<button onClick={cancelEditing} className="text-[10px] font-bold text-indigo-400 hover:text-white bg-indigo-900 px-2 py-1 rounded-lg">Cancelar</button>)} </div> <form onSubmit={handleSaveGoal} className="flex gap-2 items-end"> <div className="flex-1 space-y-2"> <input type="text" value={newGoalTitle} onChange={e => setNewGoalTitle(e.target.value)} placeholder="¿Qué quieres comprar?" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none" /> <div className="relative"> <input type="number" step="0.1" value={newGoalTarget} onChange={e => setNewGoalTarget(e.target.value)} placeholder="Precio" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none pr-8" /> <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">GB</span> </div> </div> <button disabled={isCreatingGoal || !newGoalTitle || !newGoalTarget} className={`h-full text-white p-3 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale ${editingGoalId ? 'bg-amber-500 border-amber-700' : 'bg-emerald-500 border-emerald-700'}`} > {isCreatingGoal ? <RefreshCw className="animate-spin" size={20} /> : editingGoalId ? <Check size={20} strokeWidth={3} /> : <Plus size={20} strokeWidth={3} />} </button> </form> </div> <div className="space-y-4"> {goals.length === 0 ? (<div className="text-center text-indigo-400 text-xs font-bold py-8 border-2 border-dashed border-indigo-800 rounded-2xl"> No tienes metas de ahorro aún. </div>) : (goals.map(goal => { const progress = Math.min((student.balance / goal.targetAmount) * 100, 100); const isComplete = student.balance >= goal.targetAmount; const targetGB = (goal.targetAmount / 100).toFixed(1); const currentGB = (student.balance / 100).toFixed(1); const remaining = Math.max(0, (goal.targetAmount - student.balance) / 100).toFixed(1); return (<div key={goal.id} className={`bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group ${editingGoalId === goal.id ? 'ring-4 ring-amber-400' : ''}`}> {isComplete && (<div className="absolute inset-0 bg-emerald-500/90 z-20 flex flex-col items-center justify-center text-white animate-fade-in"> <PartyPopper size={40} className="animate-bounce mb-2" /> <span className="font-black text-lg uppercase tracking-widest">¡Meta Alcanzada!</span> <p className="text-xs mt-2 opacity-90">Ya tienes suficiente para tu objetivo</p> <button onClick={() => handleDeleteGoal(goal.id)} className="mt-4 bg-white text-emerald-600 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-50 transition-colors" > Marcar como Completada </button> </div>)} <div className="flex justify-between items-start mb-2"> <h4 className="font-black text-slate-800 text-lg">{goal.title}</h4> <div className="flex gap-1"> <button onClick={() => startEditingGoal(goal)} className="text-slate-300 hover:text-amber-500 p-1 bg-slate-50 rounded-lg"><Pencil size={14} /></button> <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1 bg-slate-50 rounded-lg"><X size={14} /></button> </div> </div> <div className="bg-slate-50 rounded-xl p-3 mb-3"> <div className="flex justify-between items-center mb-1"> <span className="text-[10px] font-black text-slate-400 uppercase">Tu Saldo Actual</span> <span className="text-sm font-black text-slate-700 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {currentGB} GB</span> </div> <div className="flex justify-between items-center"> <span className="text-[10px] font-black text-slate-400 uppercase">Meta</span> <span className="text-sm font-black text-indigo-600 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {targetGB} GB</span> </div> </div> <div className="h-6 bg-slate-100 rounded-full overflow-hidden mb-3 border-2 border-slate-200 relative"> <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 transition-all duration-500 relative" style={{ width: `${progress}%` }} > <div className="absolute inset-0 bg-white/20 animate-pulse"></div> </div> <div className="absolute inset-0 flex items-center justify-center"> <span className="text-[10px] font-black text-slate-600 drop-shadow-sm">{Math.round(progress)}%</span> </div> </div> {!isComplete && (<div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-amber-700">Te faltan <span className="text-amber-900">{remaining} GB</span> para tu meta 🎯</p> </div>)} {isComplete && (<div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-emerald-700">¡Ya alcanzaste tu meta! 🎉</p> </div>)} </div>); }))} </div> </div> </div> </div>)}
-                {showAvatarModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in"> <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border-4 border-white"> <div className="text-center mb-6"> <h3 className="text-xl font-black text-slate-800">Elige tu Mascota</h3> <p className="text-xs font-bold text-slate-400 uppercase mt-1">¿Quién eres hoy?</p> </div> <div className="grid grid-cols-4 gap-3 mb-6"> {AVATAR_OPTIONS.map(opt => (<button key={opt.url} onClick={() => handleChangeAvatar(opt.url)} className={`rounded-2xl border-4 transition-all relative overflow-hidden aspect-square hover:scale-105 active:scale-95 ${student.avatar === opt.url ? 'border-violet-500 shadow-lg scale-110 bg-violet-50 z-10' : 'border-slate-100 hover:border-violet-200'}`} > <img src={opt.url} className="w-full h-full object-cover" alt={opt.name} /> </button>))} </div> <button onClick={() => setShowAvatarModal(false)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-2xl transition-colors" > Cancelar </button> </div> </div>)}
-                {showCelebration && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-fade-in"> <div className="absolute inset-0 overflow-hidden pointer-events-none"> <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div> <div className="absolute top-1/3 right-1/4 w-4 h-4 bg-emerald-400 rounded-full animate-bounce"></div> <div className="absolute bottom-1/3 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-ping delay-75"></div> <div className="absolute top-10 right-10 w-6 h-6 bg-violet-400 rotate-45 animate-pulse"></div> </div> <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 text-center relative overflow-hidden shadow-2xl border-4 border-white animate-bounce-slow"> <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-emerald-100 to-yellow-100 rounded-full blur-3xl opacity-50 animate-spin-slow pointer-events-none"></div> <div className="relative z-10"> <div className="inline-block p-4 bg-yellow-100 text-yellow-500 rounded-full mb-4 shadow-sm animate-bounce"> <PartyPopper size={48} strokeWidth={3} /> </div> <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">¡Misión Cumplida!</h2> <p className="text-slate-500 font-bold mb-6 text-sm">Tus padres y maestra aprobaron:</p> <div className="flex flex-wrap gap-2 justify-center mb-6"> {celebrationData.items.map((item, i) => (<span key={i} className="bg-slate-100 border-2 border-slate-200 px-3 py-1 rounded-xl text-xs font-black text-slate-600 capitalize"> {item} </span>))} </div> <div className="bg-slate-900 text-white rounded-3xl p-6 mb-6 shadow-xl relative overflow-hidden group"> <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-600 opacity-20 group-hover:opacity-30 transition-opacity"></div> <p className="text-emerald-300 text-xs font-black uppercase tracking-widest mb-1">Has Ganado</p> <div className="flex items-center justify-center gap-2"> <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-500 drop-shadow-sm"> +{celebrationData.count} </span> <span className="text-xl font-bold">MB</span> </div> {celebrationData.count >= 100 && (<div className="mt-2 bg-white/10 rounded-lg py-1 px-3 inline-flex items-center gap-2"> <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4 object-contain animate-pulse" /> <span className="text-xs font-bold text-white">¡Eso es +{Math.floor(celebrationData.count / 100)} GemaBit!</span> </div>)} </div> <button onClick={() => setShowCelebration(false)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-4 rounded-2xl border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest text-lg shadow-lg shadow-emerald-200" > ¡Recoger Premio! </button> </div> </div> </div>)}
+            {showGoalsModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-fade-in"> <div className="bg-indigo-900 rounded-[2.5rem] w-full max-w-md shadow-2xl border-4 border-indigo-500 relative overflow-hidden flex flex-col max-h-[90vh]"> <div className="bg-indigo-800 p-6 text-center relative border-b-4 border-indigo-950"> <button onClick={() => { setShowGoalsModal(false); cancelEditing(); }} className="absolute top-4 right-4 p-2 bg-indigo-900 rounded-full text-indigo-300 hover:text-white transition-colors border border-indigo-700"> <X size={20} /> </button> <div className="inline-block p-3 bg-indigo-500/20 rounded-2xl backdrop-blur-sm border-2 border-indigo-400/30 mb-2"> <Target size={32} className="text-indigo-200" /> </div> <h3 className="text-xl font-black text-white">Mis Metas</h3> <p className="text-indigo-200 text-xs font-bold mt-1">Visualiza tus objetivos de ahorro</p> </div> <div className="p-6 overflow-y-auto bg-indigo-900 flex-1"> <div className="bg-indigo-950/50 p-4 rounded-2xl border-2 border-indigo-800 mb-6"> <div className="flex justify-between items-center mb-3"> <h4 className="font-black text-indigo-200 text-xs uppercase tracking-widest">{editingGoalId ? 'Editar Meta' : 'Nueva Meta'}</h4> {editingGoalId && (<button onClick={cancelEditing} className="text-[10px] font-bold text-indigo-400 hover:text-white bg-indigo-900 px-2 py-1 rounded-lg">Cancelar</button>)} </div> <form onSubmit={handleSaveGoal} className="flex gap-2 items-end"> <div className="flex-1 space-y-2"> <input type="text" value={newGoalTitle} onChange={e => setNewGoalTitle(e.target.value)} placeholder="¿Qué quieres comprar?" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none" /> <div className="relative"> <input type="number" step="0.1" value={newGoalTarget} onChange={e => setNewGoalTarget(e.target.value)} placeholder="Precio" className="w-full bg-indigo-900 border border-indigo-700 rounded-xl px-3 py-2 text-white placeholder-indigo-400 text-xs font-bold focus:border-indigo-400 outline-none pr-8" /> <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-400 font-black">GB</span> </div> </div> <button disabled={isCreatingGoal || !newGoalTitle || !newGoalTarget} className={`h-full text-white p-3 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all disabled:opacity-50 disabled:grayscale ${editingGoalId ? 'bg-amber-500 border-amber-700' : 'bg-emerald-500 border-emerald-700'}`} > {isCreatingGoal ? <RefreshCw className="animate-spin" size={20} /> : editingGoalId ? <Check size={20} strokeWidth={3} /> : <Plus size={20} strokeWidth={3} />} </button> </form> </div> <div className="space-y-4"> {goals.length === 0 ? (<div className="text-center text-indigo-400 text-xs font-bold py-8 border-2 border-dashed border-indigo-800 rounded-2xl"> No tienes metas de ahorro aún. </div>) : (goals.map(goal => { const progress = Math.min((student.balance / goal.targetAmount) * 100, 100); const isComplete = student.balance >= goal.targetAmount; const targetGB = (goal.targetAmount / 100).toFixed(1); const currentGB = (student.balance / 100).toFixed(1); const remaining = Math.max(0, (goal.targetAmount - student.balance) / 100).toFixed(1); return (<div key={goal.id} className={`bg-white rounded-2xl p-4 shadow-lg relative overflow-hidden group ${editingGoalId === goal.id ? 'ring-4 ring-amber-400' : ''}`}> {isComplete && (<div className="absolute inset-0 bg-emerald-500/90 z-20 flex flex-col items-center justify-center text-white animate-fade-in"> <PartyPopper size={40} className="animate-bounce mb-2" /> <span className="font-black text-lg uppercase tracking-widest">¡Meta Alcanzada!</span> <p className="text-xs mt-2 opacity-90">Ya tienes suficiente para tu objetivo</p> <button onClick={() => handleDeleteGoal(goal.id)} className="mt-4 bg-white text-emerald-600 px-4 py-2 rounded-xl font-bold text-xs shadow-sm hover:bg-emerald-50 transition-colors" > Marcar como Completada </button> </div>)} <div className="flex justify-between items-start mb-2"> <h4 className="font-black text-slate-800 text-lg">{goal.title}</h4> <div className="flex gap-1"> <button onClick={() => startEditingGoal(goal)} className="text-slate-300 hover:text-amber-500 p-1 bg-slate-50 rounded-lg"><Pencil size={14} /></button> <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-300 hover:text-red-400 p-1 bg-slate-50 rounded-lg"><X size={14} /></button> </div> </div> <div className="bg-slate-50 rounded-xl p-3 mb-3"> <div className="flex justify-between items-center mb-1"> <span className="text-[10px] font-black text-slate-400 uppercase">Tu Saldo Actual</span> <span className="text-sm font-black text-slate-700 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {currentGB} GB</span> </div> <div className="flex justify-between items-center"> <span className="text-[10px] font-black text-slate-400 uppercase">Meta</span> <span className="text-sm font-black text-indigo-600 flex items-center gap-1"><img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4" /> {targetGB} GB</span> </div> </div> <div className="h-6 bg-slate-100 rounded-full overflow-hidden mb-3 border-2 border-slate-200 relative"> <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 transition-all duration-500 relative" style={{ width: `${progress}%` }} > <div className="absolute inset-0 bg-white/20 animate-pulse"></div> </div> <div className="absolute inset-0 flex items-center justify-center"> <span className="text-[10px] font-black text-slate-600 drop-shadow-sm">{Math.round(progress)}%</span> </div> </div> {!isComplete && (<div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-amber-700">Te faltan <span className="text-amber-900">{remaining} GB</span> para tu meta 🎯</p> </div>)} {isComplete && (<div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-2 text-center"> <p className="text-xs font-black text-emerald-700">¡Ya alcanzaste tu meta! 🎉</p> </div>)} </div>); }))} </div> </div> </div> </div>)}
+            {showAvatarModal && (<div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in"> <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl border-4 border-white"> <div className="text-center mb-6"> <h3 className="text-xl font-black text-slate-800">Elige tu Mascota</h3> <p className="text-xs font-bold text-slate-400 uppercase mt-1">¿Quién eres hoy?</p> </div> <div className="grid grid-cols-4 gap-3 mb-6"> {AVATAR_OPTIONS.map(opt => (<button key={opt.url} onClick={() => handleChangeAvatar(opt.url)} className={`rounded-2xl border-4 transition-all relative overflow-hidden aspect-square hover:scale-105 active:scale-95 ${student.avatar === opt.url ? 'border-violet-500 shadow-lg scale-110 bg-violet-50 z-10' : 'border-slate-100 hover:border-violet-200'}`} > <img src={opt.url} className="w-full h-full object-cover" alt={opt.name} /> </button>))} </div> <button onClick={() => setShowAvatarModal(false)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-2xl transition-colors" > Cancelar </button> </div> </div>)}
+            {showCelebration && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-fade-in"> <div className="absolute inset-0 overflow-hidden pointer-events-none"> <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-yellow-400 rounded-full animate-ping"></div> <div className="absolute top-1/3 right-1/4 w-4 h-4 bg-emerald-400 rounded-full animate-bounce"></div> <div className="absolute bottom-1/3 left-1/3 w-2 h-2 bg-rose-400 rounded-full animate-ping delay-75"></div> <div className="absolute top-10 right-10 w-6 h-6 bg-violet-400 rotate-45 animate-pulse"></div> </div> <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 text-center relative overflow-hidden shadow-2xl border-4 border-white animate-bounce-slow"> <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-emerald-100 to-yellow-100 rounded-full blur-3xl opacity-50 animate-spin-slow pointer-events-none"></div> <div className="relative z-10"> <div className="inline-block p-4 bg-yellow-100 text-yellow-500 rounded-full mb-4 shadow-sm animate-bounce"> <PartyPopper size={48} strokeWidth={3} /> </div> <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">¡Misión Cumplida!</h2> <p className="text-slate-500 font-bold mb-6 text-sm">Tus padres y maestra aprobaron:</p> <div className="flex flex-wrap gap-2 justify-center mb-6"> {celebrationData.items.map((item, i) => (<span key={i} className="bg-slate-100 border-2 border-slate-200 px-3 py-1 rounded-xl text-xs font-black text-slate-600 capitalize"> {item} </span>))} </div> <div className="bg-slate-900 text-white rounded-3xl p-6 mb-6 shadow-xl relative overflow-hidden group"> <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-600 opacity-20 group-hover:opacity-30 transition-opacity"></div> <p className="text-emerald-300 text-xs font-black uppercase tracking-widest mb-1">Has Ganado</p> <div className="flex items-center justify-center gap-2"> <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-500 drop-shadow-sm"> +{celebrationData.count} </span> <span className="text-xl font-bold">MB</span> </div> {celebrationData.count >= 100 && (<div className="mt-2 bg-white/10 rounded-lg py-1 px-3 inline-flex items-center gap-2"> <img src="https://i.ibb.co/kVhqQ0K9/gemabit.png" className="w-4 h-4 object-contain animate-pulse" /> <span className="text-xs font-bold text-white">¡Eso es +{Math.floor(celebrationData.count / 100)} GemaBit!</span> </div>)} </div> <button onClick={() => setShowCelebration(false)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-4 rounded-2xl border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-1 transition-all uppercase tracking-widest text-lg shadow-lg shadow-emerald-200" > ¡Recoger Premio! </button> </div> </div> </div>)}
 
-                <PasswordChangeModal
-                    isOpen={showPasswordModal}
-                    onClose={() => setShowPasswordModal(false)}
-                    mode={passwordModalMode}
-                    targetUser={passwordTargetUser}
-                    currentUserId={student.uid}
-                    currentUserRole="ALUMNO"
-                    onSuccess={() => {
-                        soundService.playSuccess();
-                        loadLinkedParents();
-                    }}
-                />
-            </div>
+            <PasswordChangeModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                mode={passwordModalMode}
+                targetUser={passwordTargetUser}
+                currentUserId={student.uid}
+                currentUserRole="ALUMNO"
+                onSuccess={() => {
+                    soundService.playSuccess();
+                    loadLinkedParents();
+                }}
+            />
+        </div>
     );
 };

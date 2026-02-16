@@ -598,9 +598,10 @@ export const supabaseService = {
     }
   },
 
-  updateAvatar: async (uid: string, newAvatarUrl: string) => {
+  updateAvatar: async (uid: string, newAvatarUrl: string): Promise<{ success: boolean, error?: string }> => {
     const { error } = await supabase.from('profiles').update({ avatar_url: newAvatarUrl }).eq('id', uid);
-    return !error;
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
   updateDisplayName: async (uid: string, newName: string) => {
@@ -909,6 +910,18 @@ export const supabaseService = {
 
     if (error) return { success: false, count: 0 };
     return { success: true, count: data?.length || 0 };
+  },
+
+  cashOutQuizEarnings: async (studentId: string): Promise<{ success: boolean, error?: string }> => {
+    const { data, error } = await supabase
+      .from('quiz_results')
+      .update({ status: 'PENDING' })
+      .eq('student_id', studentId)
+      .eq('status', 'IN_BAG')
+      .select();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
   getPendingQuizApprovals: async () => {
