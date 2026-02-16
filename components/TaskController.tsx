@@ -40,6 +40,7 @@ const getTaskLabel = (key: string) => {
 export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allowedType, readOnly = false, weekId, onUpdate }) => {
   const [tasks, setTasks] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ key: string, label: string, currentVal: boolean, reward: number } | null>(null);
 
   const currentWeek = weekId || getCurrentWeekId();
@@ -70,11 +71,12 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
 
   // Step 2: Execute Action after Confirmation
   const executeToggle = async () => {
-    if (!confirmAction) return;
+    if (!confirmAction || processing) return; // Prevenir doble procesamiento
 
     const { key, currentVal } = confirmAction;
     const newVal = !currentVal;
 
+    setProcessing(key); // Bloquear esta tarea específica
     setLoading(true);
     setConfirmAction(null); // Close modal
 
@@ -94,6 +96,7 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
     if (onUpdate) onUpdate();
 
     setLoading(false);
+    setProcessing(null); // Desbloquear
   };
 
   if (tasks.length === 0) return <div className="p-4 text-center text-slate-400 font-bold">Sin tareas asignadas</div>;

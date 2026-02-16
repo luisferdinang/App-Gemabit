@@ -4,7 +4,7 @@ import { User, ExpenseRequest, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { TaskController } from './TaskController';
 import { User as UserIcon, Link as LinkIcon, School, Home, Coins, Trophy, AlertTriangle, Check, X, History, TrendingDown, Calendar, Gamepad2, ArrowUpCircle, ArrowDownCircle, Sparkles, ChevronDown, Lock, RefreshCw, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
-import { getWeekDateRange } from '../utils/dateUtils';
+import { getWeekDateRange, getRelativeWeekNumber } from '../utils/dateUtils';
 import { soundService } from '../services/soundService';
 import { useUserStore } from '../store/userStore';
 import { PasswordChangeModal } from './PasswordChangeModal';
@@ -33,6 +33,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     // Week Navigation State
     const [availableWeeks, setAvailableWeeks] = useState<{ weekId: string, completion: number }[]>([]);
     const [selectedWeek, setSelectedWeek] = useState<string>(getCurrentWeekId());
+    const [systemStartDate, setSystemStartDate] = useState<string | null>(null);
 
     // Password Change Modal State
     const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -42,6 +43,13 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
     // 1. Carga inicial y suscripciones en tiempo real
     useEffect(() => {
         loadParentData();
+
+        // Cargar fecha de inicio del sistema
+        const loadSystemStart = async () => {
+            const startWeek = await supabaseService.getSystemStartWeekId();
+            setSystemStartDate(startWeek);
+        };
+        loadSystemStart();
 
         const subParent = supabaseService.subscribeToChanges('profiles', `id=eq.${currentUser.uid}`, () => { loadParentData(); });
 
@@ -444,7 +452,7 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
                                 <div className="p-2 bg-slate-50 text-slate-400 rounded-xl"><Calendar size={18} /></div>
                                 <div className="relative pr-6">
                                     <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="appearance-none bg-transparent font-black text-slate-700 text-sm focus:outline-none cursor-pointer">
-                                        {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {week.weekId.split('-W')[1]} ({week.weekId === getCurrentWeekId() ? 'Actual' : getWeekDateRange(week.weekId)})</option>))}
+                                        {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {systemStartDate ? getRelativeWeekNumber(week.weekId, systemStartDate) : week.weekId.split('-W')[1]} ({week.weekId === getCurrentWeekId() ? 'Actual' : getWeekDateRange(week.weekId)})</option>))}
                                     </select>
                                     <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                                 </div>

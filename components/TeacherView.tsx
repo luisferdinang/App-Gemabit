@@ -460,6 +460,26 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     return { icon, colorClass };
   };
 
+  const getTransactionOrigin = (t: Transaction) => {
+    const desc = t.description.toUpperCase();
+
+    const schoolTasks = ['ASISTENCIA', 'RESPONSABILIDAD', 'COMPORTAMIENTO', 'RESPETO', 'PARTICIPACIÓN'];
+    const isSchoolTask = schoolTasks.some(task => desc.includes(task));
+
+    if (isSchoolTask) {
+      return { label: 'MAESTRA', badge: 'bg-violet-100 text-violet-600 border-violet-200' };
+    }
+
+    const homeTasks = ['ORDEN', 'ASEO', 'ESTUDIO', 'AYUDA'];
+    const isHomeTask = homeTasks.some(task => desc.includes(task));
+
+    if (isHomeTask) {
+      return { label: 'PADRES', badge: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
+    }
+
+    return { label: 'SISTEMA', badge: 'bg-sky-100 text-sky-600 border-sky-200' };
+  };
+
   return (
     <div className="space-y-6">
 
@@ -594,6 +614,33 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                             <img src="https://i.ibb.co/JWvYtPhJ/minibit-1.png" className="w-3 h-3" />
                             {activeStudentData.balance % 100} MiniBits
                           </span>
+                          <span className="text-[10px] font-black bg-violet-100 text-violet-700 px-3 py-1 rounded-lg flex items-center gap-1 border border-violet-200 shadow-sm">
+                            ⚡ Racha: {activeStudentData.streakWeeks}/4 sem
+                          </span>
+                          <button
+                            onClick={async () => {
+                              const reason = prompt('¿Por qué asignas este SuperGemabit manualmente?\n(Ej: "Padres olvidaron asignar semana 1")');
+                              if (!reason || !reason.trim()) return;
+
+                              if (confirm(`¿Asignar 1 SuperGemabit (500 MB) a ${activeStudentData.displayName}?\n\nRazón: ${reason}\n\nEsto reseteará su racha a 0.`)) {
+                                setActionLoading(true);
+                                const result = await supabaseService.assignSuperGemabitManually(activeStudentData.uid, reason);
+                                setActionLoading(false);
+
+                                if (result.success) {
+                                  soundService.playCelebration();
+                                  alert('✅ SuperGemabit asignado correctamente');
+                                  loadData();
+                                } else {
+                                  alert('❌ Error: ' + result.error);
+                                }
+                              }
+                            }}
+                            className="text-[10px] font-black bg-yellow-400 text-yellow-900 px-3 py-1 rounded-lg hover:bg-yellow-500 transition-all flex items-center gap-1 border-b-2 border-yellow-600 active:border-b-0 active:translate-y-1 shadow-sm"
+                            title="Asignar SuperGemabit manualmente"
+                          >
+                            ⭐ SuperGemabit Manual
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -649,20 +696,51 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                     <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                       {studentTransactions.map(t => {
                         const { icon, colorClass } = getTransactionVisuals(t);
+                        const origin = getTransactionOrigin(t);
                         const isEarn = t.type === 'EARN';
                         return (
-                          <div key={t.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:border-slate-200 transition-colors">
+                          <div key={t.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:border-slate-200 transition-colors group">
                             <div className="flex items-center gap-3">
                               <div className={`p-2 rounded-xl ${colorClass}`}>
                                 {icon}
                               </div>
                               <div>
                                 <p className="font-black text-slate-700 text-xs line-clamp-1 uppercase">{t.description}</p>
-                                <p className="text-[9px] font-bold text-slate-400">{new Date(t.timestamp).toLocaleDateString()}</p>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <p className="text-[9px] font-bold text-slate-400">{new Date(t.timestamp).toLocaleDateString()}</p>
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${origin.badge}`}>
+                                    {origin.label}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                            <div className={`font-black text-sm flex items-center gap-1 ${isEarn ? 'text-emerald-500' : 'text-rose-500'}`}>
-                              {isEarn ? '+' : ''}{t.amount} MB
+                            <div className="flex items-center gap-2">
+                              <div className={`font-black text-sm flex items-center gap-1 ${isEarn ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {isEarn ? '+' : ''}{t.amount} MB
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`¿Borrar esta transacción?\n\n${t.description}\n${t.amount} MB\n\nEsto ajustará el balance del estudiante.`)) {
+                                    setActionLoading(true);
+                                    const result = await supabaseService.deleteTransaction(t.id);
+                                    setActionLoading(false);
+                                    if (result.success) {
+                                      soundService.playPop();
+                                      loadData();
+                                      if (selectedStudent) {
+                                        const transactions = await supabaseService.getTransactions(selectedStudent);
+                                        setStudentTransactions(transactions);
+                                      }
+                                    } else {
+                                      alert('❌ Error: ' + result.error);
+                                    }
+                                  }
+                                }}
+                                className="p-1.5 bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition-all active:scale-95"
+                                title="Borrar transacción"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </div>
                         );
@@ -1639,18 +1717,19 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
               ) : (
                 <div className="space-y-2">
                   {allQuizResults.filter(r => r.quizId === quizCompletionsView).map((result, idx) => {
-                    // Filter duplicates if any, though map index is key for simple display
                     const st = students.find(s => s.uid === result.studentId);
                     if (!st) return null;
+                    const isFailed = result.score === 0;
                     return (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl shadow-sm">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
-                          <img src={st.avatar} className="w-full h-full object-cover" />
+                      <div key={idx} className={`flex items-center gap-3 p-3 border rounded-xl shadow-sm ${isFailed ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
+                        <div className={`w-10 h-10 rounded-full border overflow-hidden ${isFailed ? 'border-red-200 bg-red-100' : 'border-slate-200 bg-slate-100'}`}>
+                          <img src={st.avatar} className={`w-full h-full object-cover ${isFailed ? 'grayscale opacity-80' : ''}`} />
                         </div>
                         <div>
-                          <p className="font-black text-slate-700 text-xs">{st.displayName}</p>
-                          <p className="text-[10px] font-bold text-emerald-500 flex items-center gap-1">
-                            <CheckCircle2 size={10} /> Completado
+                          <p className={`font-black text-xs ${isFailed ? 'text-red-700' : 'text-slate-700'}`}>{st.displayName}</p>
+                          <p className={`text-[10px] font-bold flex items-center gap-1 ${isFailed ? 'text-red-500' : 'text-emerald-500'}`}>
+                            {isFailed ? <X size={10} strokeWidth={3} /> : <CheckCircle2 size={10} />}
+                            {isFailed ? 'Fallido (0 MB)' : 'Completado'}
                           </p>
                         </div>
                       </div>

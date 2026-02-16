@@ -770,6 +770,56 @@ export const supabaseService = {
     }));
   },
 
+  deleteTransaction: async (transactionId: string): Promise<{ success: boolean, error?: string }> => {
+    try {
+      // 1. Obtener la transacción antes de borrarla
+      const { data: transaction, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (fetchError || !transaction) {
+        return { success: false, error: 'Transacción no encontrada' };
+      }
+
+      // 2. Ajustar el balance del estudiante (revertir la transacción)
+      const { data: student, error: studentError } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', transaction.student_id)
+        .single();
+
+      if (studentError || !student) {
+        return { success: false, error: 'Estudiante no encontrado' };
+      }
+
+      const newBalance = student.balance - transaction.amount;
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', transaction.student_id);
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      // 3. Eliminar la transacción
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transactionId);
+
+      if (deleteError) {
+        return { success: false, error: deleteError.message };
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  },
+
   createTeacherQuiz: async (quiz: any): Promise<{ success: boolean, error?: string }> => {
     const { error } = await supabase.from('quizzes').insert({
       type: quiz.type,
@@ -1081,5 +1131,52 @@ export const supabaseService = {
     });
 
     return { success: true };
-  }
+  },
+
+  assignSuperGemabitManually: async (studentId: string, reason: string): Promise<{ success: boolean, error?: string }> => {
+    try {
+      const { data: student, error: fetchError } = await supabase
+        .from('profiles')
+        .select('balance, streak_weeks')
+        .eq('id', studentId)
+        .single();
+
+      if (fetchError || !student) {
+        return { success: false, error: 'Estudiante no encontrado' };
+      }
+
+      const SUPER_GEMABIT_VALUE = 500;
+      const newBalance = student.balance + SUPER_GEMABIT_VALUE;
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          balance: newBalance,
+          streak_weeks: 0
+        })
+        .eq('id', studentId);
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          student_id: studentId,
+          amount: SUPER_GEMABIT_VALUE,
+          description: `SuperGemabit Manual: ${reason}`,
+          type: 'EARN',
+          timestamp: Date.now()
+        });
+
+      if (transactionError) {
+        return { success: false, error: transactionError.message };
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  },
 };
