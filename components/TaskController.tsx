@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TaskLog, TaskType } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
 import { soundService } from '../services/soundService';
-import { Check, Star, BookOpen, CalendarCheck, HandHeart, Sparkles, UserCheck, Trash2, Home, School, AlertCircle, X } from 'lucide-react';
+import { Check, Star, BookOpen, CalendarCheck, HandHeart, Sparkles, UserCheck, Trash2, Home, School, AlertCircle, X, Loader2 } from 'lucide-react';
 
 interface TaskControllerProps {
   studentId: string;
@@ -78,13 +78,25 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
 
     setProcessing(key); // Bloquear esta tarea específica
     setLoading(true);
-    setConfirmAction(null); // Close modal
+
+    // Actualización Optimista (UI responde de inmediato)
+    const activeTaskId = tasks[0]?.id;
+    if (activeTaskId) {
+      setTasks(prevTasks => prevTasks.map(t => {
+        if (t.id === activeTaskId) {
+          return { ...t, status: { ...t.status, [key]: newVal } };
+        }
+        return t;
+      }));
+    }
 
     // Play Sound immediately for feedback
     if (newVal) soundService.playCoin();
     else soundService.playPop(); // Use pop for removal
 
     const result = await supabaseService.updateTaskStatus(studentId, allowedType, key, newVal, currentWeek);
+
+    setConfirmAction(null); // Cerrar modal DESPUÉS de recibir respuesta del servidor
 
     // Manejar respuesta - verificar si hay error de límite
     if (result && !result.success && result.error) {
@@ -127,10 +139,12 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
                     `}
                 >
                   <div className={`
-                      p-3 rounded-full transition-transform duration-300
+                      p-3 rounded-full transition-transform duration-300 relative
                       ${completed ? 'bg-white/20 scale-110 rotate-0' : 'bg-slate-100 scale-100 grayscale'}
                     `}>
-                    {getTaskIcon(key)}
+                    {processing === key ? (
+                      <Loader2 className="animate-spin text-slate-400" size={28} />
+                    ) : getTaskIcon(key)}
                   </div>
 
                   <span className={`text-xs font-black uppercase tracking-wider ${completed ? 'opacity-100' : 'opacity-70'}`}>
@@ -180,12 +194,14 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
                 Cancelar
               </button>
               <button
+                disabled={loading}
                 onClick={executeToggle}
-                className={`flex-1 py-3 text-white font-black rounded-xl shadow-lg border-b-4 active:border-b-0 active:translate-y-1 transition-all
-                              ${confirmAction.currentVal ? 'bg-red-500 border-red-700 hover:bg-red-600' : 'bg-emerald-500 border-emerald-700 hover:bg-emerald-600'}
-                          `}
+                className={`flex-1 py-3 text-white font-black rounded-xl shadow-lg border-b-4 transition-all flex items-center justify-center
+                                ${confirmAction.currentVal ? 'bg-red-500 border-red-700 hover:bg-red-600' : 'bg-emerald-500 border-emerald-700 hover:bg-emerald-600'}
+                                ${loading ? 'opacity-70 cursor-not-allowed' : 'active:border-b-0 active:translate-y-1'}
+                            `}
               >
-                {confirmAction.currentVal ? 'QUITAR' : 'APROBAR'}
+                {loading ? <Loader2 className="animate-spin" size={20} /> : (confirmAction.currentVal ? 'QUITAR' : 'APROBAR')}
               </button>
             </div>
           </div>

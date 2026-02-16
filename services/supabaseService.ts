@@ -685,46 +685,22 @@ export const supabaseService = {
     const reward = type === 'SCHOOL' ? 20 : 25;
     const change = value ? reward : -reward;
 
-    // Si estamos AÑADIENDO puntos (value = true), verificar límite semanal
-    if (value) {
-      const weekStart = getWeekStartTimestamp(weekId);
-      const weekEnd = getWeekEndTimestamp(weekId);
-
-      // Obtener todas las transacciones de ganancia de esta semana para este estudiante
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('amount, description')
-        .eq('student_id', studentId)
-        .eq('type', 'EARN')
-        .gte('timestamp', weekStart)
-        .lte('timestamp', weekEnd);
-
-      // Lista de tareas escolares para filtrar
-      const schoolTasks = ['Asistencia', 'Responsabilidad', 'Comportamiento', 'Respeto', 'Participación'];
-
-      // Calcular total ganado en la semana para este tipo específico
-      const weeklyEarned = (transactions || [])
-        .filter(t => {
-          const isSchoolTask = schoolTasks.some(task => t.description.includes(task));
-          return type === 'SCHOOL' ? isSchoolTask : !isSchoolTask;
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      const WEEKLY_LIMIT = 100; // 100 MB por semana por tipo
-
-      if (weeklyEarned + reward > WEEKLY_LIMIT) {
-        const remaining = WEEKLY_LIMIT - weeklyEarned;
-        return {
-          success: false,
-          error: `Límite semanal alcanzado. Ya se asignaron ${weeklyEarned} MB de ${WEEKLY_LIMIT} MB esta semana. Solo quedan ${remaining} MB disponibles.`,
-          weeklyUsed: weeklyEarned
-        };
-      }
-    }
-
     // Proceder con la asignación
+
+    // Proceder con la asignación usando un filtro de seguridad (Optimistic Locking)
+    // Solo actualizamos si el estado actual en la DB sigue siendo el opuesto al que queremos poner
     const newStatus = { ...task.status, [key]: value };
-    await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
+    const { data: updateData, error: updateError } = await supabase
+      .from('tasks')
+      .update({ status: newStatus })
+      .eq('id', task.id)
+      .filter(`status->>${key}`, 'eq', (!value).toString()) // Asegurarnos que el valor actual es el opuesto
+      .select();
+
+    if (updateError || !updateData || updateData.length === 0) {
+      // Si no se actualizó nada, es porque alguien más ya lo hizo o hubo un error
+      return { success: false, error: 'La tarea ya fue actualizada por otro usuario o dispositivo.' };
+    }
 
     const label = TASK_NAMES[key] || key;
 
