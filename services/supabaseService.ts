@@ -797,6 +797,64 @@ export const supabaseService = {
     }
   },
 
+  resetStudentWeek: async (studentId: string, weekId: string): Promise<{ success: boolean, error?: string }> => {
+    try {
+      // 1. Obtener rango de tiempo de la semana
+      const weekStart = getWeekStartTimestamp(weekId);
+      const weekEnd = getWeekEndTimestamp(weekId);
+
+      // 2. Buscar transacciones de tareas de esa semana para ese alumno
+      const { data: transactions, error: transError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('student_id', studentId)
+        .gte('timestamp', weekStart)
+        .lte('timestamp', weekEnd)
+        .ilike('description', 'Tarea: %');
+
+      if (transError) throw transError;
+
+      // 3. Calcular monto a descontar
+      const totalToReset = (transactions || []).reduce((sum, t) => sum + t.amount, 0);
+
+      // 4. Actualizar balance del alumno (asegurando que no sea negativo)
+      if (totalToReset !== 0) {
+        const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
+        if (student) {
+          const newBalance = Math.max(0, student.balance - totalToReset);
+          await supabase.from('profiles').update({ balance: newBalance }).eq('id', studentId);
+        }
+      }
+
+      // 5. Eliminar las transacciones de esas tareas
+      if (transactions && transactions.length > 0) {
+        const transIds = transactions.map(t => t.id);
+        await supabase.from('transactions').delete().in('id', transIds);
+      }
+
+      // 6. Resetear estados de tareas en la tabla 'tasks'
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('week_id', weekId);
+
+      if (tasks) {
+        for (const task of tasks) {
+          const resetStatus = Object.fromEntries(
+            Object.keys(task.status).map(key => [key, false])
+          );
+          await supabase.from('tasks').update({ status: resetStatus }).eq('id', task.id);
+        }
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error resetting week:", e);
+      return { success: false, error: e.message };
+    }
+  },
+
   createTeacherQuiz: async (quiz: any): Promise<{ success: boolean, error?: string }> => {
     const { error } = await supabase.from('quizzes').insert({
       type: quiz.type,

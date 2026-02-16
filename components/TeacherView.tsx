@@ -6,7 +6,7 @@ import { TaskController } from './TaskController';
 import { TeacherGuide } from './TeacherGuide'; // IMPORTADO
 import {
   User as UserIcon, Check, X, ShieldAlert, BarChart3, Plus, BrainCircuit, School,
-  Home, Trophy, Gamepad2, RefreshCw, Lock, ShieldCheck, KeyRound, UserPlus,
+  Home, Trophy, Gamepad2, RefreshCw, Lock, Unlock, ShieldCheck, KeyRound, UserPlus,
   Settings, Trash2, Calendar, ChevronDown, CheckCircle2, Clock,
   MessageCircleQuestion, Puzzle, Layers, ListOrdered, Projector,
   PartyPopper, Lightbulb, ArrowRight, ArrowLeft, Star, ShoppingBag,
@@ -102,6 +102,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [correctIndex, setCorrectIndex] = useState(0); // Used for TEXT and INTRUDER
   const [gameItems, setGameItems] = useState<string[]>(['', '', '']); // Used for SENTENCE
   const [sortItems, setSortItems] = useState<{ text: string, cat: 'NEED' | 'WANT' }[]>([{ text: '', cat: 'NEED' }, { text: '', cat: 'WANT' }]);
+  const [isHomeTasksEditable, setIsHomeTasksEditable] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -655,11 +656,33 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                   <div className="border-t border-slate-50 mt-6 pt-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-slate-100 text-slate-500 rounded-lg"><Calendar size={20} /></div>
-                      <div className="relative flex-1">
-                        <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="w-full appearance-none bg-slate-50 border-2 border-slate-100 rounded-xl p-3 pr-10 font-black text-slate-600 focus:outline-none focus:border-violet-500 transition-colors text-sm">
-                          {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {getRelativeWeekNumber(week.weekId, systemStartDate)} ({week.weekId === getCurrentWeekId() ? 'Actual' : week.weekId.split('-W')[0]})</option>))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="relative flex-1">
+                          <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="w-full appearance-none bg-slate-50 border-2 border-slate-100 rounded-xl p-3 pr-10 font-black text-slate-600 focus:outline-none focus:border-violet-500 transition-colors text-sm">
+                            {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {getRelativeWeekNumber(week.weekId, systemStartDate)} ({week.weekId === getCurrentWeekId() ? 'Actual' : week.weekId.split('-W')[0]})</option>))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`¿Reiniciar COMPLETAMENTE la Semana ${getRelativeWeekNumber(selectedWeek, systemStartDate)} para ${activeStudentData.displayName}?\n\nEsto borrará los puntos ganados por tareas esta semana y desmarcará todo.`)) {
+                              setActionLoading(true);
+                              const result = await supabaseService.resetStudentWeek(activeStudentData.uid, selectedWeek);
+                              setActionLoading(false);
+                              if (result.success) {
+                                soundService.playPop();
+                                alert('✅ Semana reiniciada correctamente');
+                                loadData();
+                              } else {
+                                alert('❌ Error: ' + result.error);
+                              }
+                            }
+                          }}
+                          className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-100 transition-all active:scale-95 border-2 border-red-100"
+                          title="Reiniciar Semana"
+                        >
+                          <RefreshCw size={20} className={actionLoading ? 'animate-spin' : ''} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -674,11 +697,25 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                     <TaskController studentId={activeStudentData.uid} allowedType="SCHOOL" weekId={selectedWeek} onUpdate={loadData} />
                   </div>
                   <div className="bg-slate-50 rounded-[2rem] p-6 border-2 border-slate-100">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Home size={24} /></div>
-                      <h3 className="font-black text-slate-700 text-lg">Casa</h3>
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><Home size={24} /></div>
+                        <h3 className="font-black text-slate-700 text-lg">Casa</h3>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setIsHomeTasksEditable(!isHomeTasksEditable);
+                          if (!isHomeTasksEditable) soundService.playCoin();
+                          else soundService.playPop();
+                        }}
+                        className={`p-2 rounded-xl transition-all border-2 flex items-center gap-2 font-bold text-[10px] uppercase tracking-wider ${isHomeTasksEditable ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}
+                        title={isHomeTasksEditable ? "Bloquear edición" : "Habilitar edición (Solo casos especiales)"}
+                      >
+                        {isHomeTasksEditable ? <Unlock size={16} /> : <Lock size={16} />}
+                        {isHomeTasksEditable ? "Editanto" : "Bloqueado"}
+                      </button>
                     </div>
-                    <TaskController studentId={activeStudentData.uid} allowedType="HOME" readOnly={true} weekId={selectedWeek} />
+                    <TaskController studentId={activeStudentData.uid} allowedType="HOME" readOnly={!isHomeTasksEditable} weekId={selectedWeek} onUpdate={loadData} />
                   </div>
                 </div>
 
