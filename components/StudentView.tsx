@@ -18,6 +18,7 @@ import { SentenceGame } from './games/SentenceGame';
 import { SortingGame } from './games/SortingGame';
 import { SequenceGame } from './games/SequenceGame';
 import { IntruderGame } from './games/IntruderGame';
+import { MatchingGame } from './games/MatchingGame';
 import { useUserStore, UserState } from '../store/userStore';
 import { PasswordChangeModal } from './PasswordChangeModal';
 
@@ -385,6 +386,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
             case 'SORTING': return <SortingGame quiz={activeQuiz} onComplete={handleQuizSuccess} onFail={handleQuizFail} />;
             case 'SEQUENCE': return <SequenceGame quiz={activeQuiz} onComplete={handleQuizSuccess} onFail={handleQuizFail} />;
             case 'INTRUDER': return <IntruderGame quiz={activeQuiz} onComplete={handleQuizSuccess} onFail={handleQuizFail} />;
+            case 'MATCHING': return <MatchingGame quiz={activeQuiz} onComplete={handleQuizSuccess} onFail={handleQuizFail} />;
             case 'TEXT': default: return (<div className="space-y-3 mb-6"> {activeQuiz.options?.map((opt, idx) => (<button key={idx} onClick={() => handleTextAnswer(idx)} className="w-full text-left p-4 rounded-2xl border-4 border-slate-100 font-bold text-slate-600 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-all active:scale-95 text-lg" > {opt} </button>))} </div>);
         }
     };

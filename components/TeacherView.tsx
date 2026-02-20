@@ -102,6 +102,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const [correctIndex, setCorrectIndex] = useState(0); // Used for TEXT and INTRUDER
   const [gameItems, setGameItems] = useState<string[]>(['', '', '']); // Used for SENTENCE
   const [sortItems, setSortItems] = useState<{ text: string, cat: 'NEED' | 'WANT' }[]>([{ text: '', cat: 'NEED' }, { text: '', cat: 'WANT' }]);
+  const [matchingPairs, setMatchingPairs] = useState<{ word: string, meaning: string }[]>([{ word: '', meaning: '' }, { word: '', meaning: '' }]);
   const [isHomeTasksEditable, setIsHomeTasksEditable] = useState(false);
 
   useEffect(() => {
@@ -393,6 +394,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
     setCorrectIndex(0);
     setGameItems(['', '', '']);
     setSortItems([{ text: '', cat: 'NEED' }, { text: '', cat: 'WANT' }]);
+    setMatchingPairs([{ word: '', meaning: '' }, { word: '', meaning: '' }]);
     setAssignedTo('ALL');
   };
 
@@ -416,6 +418,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       newQuiz.options = steps;
     }
     else if (quizType === 'SORTING') { newQuiz.gameItems = sortItems.filter(i => i.text.trim()).map((item, i) => ({ id: `${i}`, text: item.text, category: item.cat })); }
+    else if (quizType === 'MATCHING') {
+      const validPairs = matchingPairs.filter(p => p.word.trim() && p.meaning.trim());
+      if (validPairs.length < 2) { alert("¡Añade al menos 2 pares de emparejamiento!"); setIsCreatingQuiz(false); return; }
+      newQuiz.gameItems = validPairs.map((p, i) => ({ id: `${i}`, text: p.word, meaning: p.meaning }));
+    }
 
     try {
       const result = await supabaseService.createTeacherQuiz(newQuiz);
@@ -1382,13 +1389,14 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
             </div>
 
             <form onSubmit={handleCreateQuiz} className="space-y-6">
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[
                   { id: 'TEXT', icon: <MessageCircleQuestion size={20} />, label: 'Trivia', color: 'bg-sky-500' },
                   { id: 'SENTENCE', icon: <Puzzle size={20} />, label: 'Frase', color: 'bg-orange-500' },
                   { id: 'SORTING', icon: <Layers size={20} />, label: 'Categoría', color: 'bg-violet-500' },
                   { id: 'SEQUENCE', icon: <ListOrdered size={20} />, label: 'Secuencia', color: 'bg-cyan-500' },
                   { id: 'INTRUDER', icon: <Ghost size={20} />, label: 'Intruso', color: 'bg-indigo-500' },
+                  { id: 'MATCHING', icon: <LinkIcon size={20} />, label: 'Emparejar', color: 'bg-rose-500' },
                 ].map(t => (
                   <button
                     key={t.id}
@@ -1478,6 +1486,24 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                       ))}
                     </div>
                     <button type="button" onClick={() => setSortItems([...sortItems, { text: '', cat: 'NEED' }])} className="text-[10px] font-black text-violet-500 hover:text-violet-700 flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 rounded-lg w-fit mt-2 border border-violet-100 shadow-sm"><Plus size={14} strokeWidth={4} /> AGREGAR</button>
+                  </div>
+                )}
+
+                {quizType === 'MATCHING' && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pares de Emparejamiento</p>
+                    <div className="space-y-3">
+                      {matchingPairs.map((pair, i) => (
+                        <div key={i} className="space-y-2 p-3 bg-white border-2 border-slate-200 rounded-2xl">
+                          <div className="flex items-center justify-between gap-2">
+                            <input value={pair.word} placeholder="Palabra (ej: Perro)" onChange={e => { const newPairs = [...matchingPairs]; newPairs[i].word = e.target.value; setMatchingPairs(newPairs); }} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold focus:border-rose-400 transition-all" />
+                            <ArrowRight className="text-slate-300" size={16} />
+                            <input value={pair.meaning} placeholder="Significado (ej: Animal que ladra)" onChange={e => { const newPairs = [...matchingPairs]; newPairs[i].meaning = e.target.value; setMatchingPairs(newPairs); }} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold focus:border-rose-400 transition-all" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setMatchingPairs([...matchingPairs, { word: '', meaning: '' }])} className="text-[10px] font-black text-rose-500 hover:text-rose-700 flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 rounded-lg w-fit mt-2 border border-rose-100 shadow-sm"><Plus size={14} strokeWidth={4} /> AGREGAR PAR</button>
                   </div>
                 )}
               </div>

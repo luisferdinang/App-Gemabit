@@ -76,27 +76,29 @@ export interface SavingsGoal {
 }
 
 // GAME TYPES - UPDATED (MEMORY replaced by SEQUENCE)
-export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'SEQUENCE' | 'INTRUDER';
+// GAME TYPES - UPDATED (MEMORY replaced by SEQUENCE)
+export type QuizType = 'TEXT' | 'SENTENCE' | 'SORTING' | 'SEQUENCE' | 'INTRUDER' | 'MATCHING';
 
 export interface QuizGameItem {
   id: string;
   text: string;
   category?: 'NEED' | 'WANT'; // For sorting game
   value?: number; // For balance game (not used in item list usually, but good to have)
+  meaning?: string; // For matching game
 }
 
 export interface Quiz {
   id: string;
   type: QuizType; // New field
   question: string; // Main instruction or Hint
-  
+
   // TEXT QUIZ & INTRUDER & SEQUENCE
   options?: string[]; // Used for Sequence items in correct order
   correctIndex?: number;
 
-  // SENTENCE, SORTING
+  // SENTENCE, SORTING, MATCHING
   gameItems?: QuizGameItem[]; // Generic items list for games
-  
+
   // BALANCE (Deprecated fields kept optional to prevent breakage if existing data exists)
   targetValue?: number;
 
@@ -104,9 +106,9 @@ export interface Quiz {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
   assignedTo?: string | 'ALL'; // 'ALL' or Student UID
   createdBy?: 'AI' | 'TEACHER';
-  
+
   // Legacy field support
-  answer?: string; 
+  answer?: string;
 }
 
 // IN_BAG: Completed locally, waiting for student to "Cash Out"
