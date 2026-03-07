@@ -80,10 +80,10 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
     setLoading(true);
 
     // Actualización Optimista (UI responde de inmediato)
-    const activeTaskId = tasks[0]?.id;
-    if (activeTaskId) {
+    const taskToUpdate = tasks.find(t => t.type === allowedType);
+    if (taskToUpdate) {
       setTasks(prevTasks => prevTasks.map(t => {
-        if (t.id === activeTaskId) {
+        if (t.id === taskToUpdate.id) {
           return { ...t, status: { ...t.status, [key]: newVal } };
         }
         return t;
@@ -114,7 +114,9 @@ export const TaskController: React.FC<TaskControllerProps> = ({ studentId, allow
   if (tasks.length === 0) return <div className="p-4 text-center text-slate-400 font-bold">Sin tareas asignadas</div>;
 
   const baseColor = allowedType === 'SCHOOL' ? 'violet' : 'emerald';
-  const activeTask = tasks[0];
+  const activeTask = tasks.find(t => t.type === allowedType);
+
+  if (!activeTask) return <div className="p-4 text-center text-slate-400 font-bold">Sin tareas asignadas</div>;
 
   return (
     <>

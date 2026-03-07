@@ -65,10 +65,18 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
             if (selectedChild) loadChildHistory(selectedChild);
         });
 
+        const subTasks = supabaseService.subscribeToChanges('tasks', undefined, () => {
+            if (selectedChild) {
+                loadParentData();
+                loadChildWeeks(selectedChild);
+            }
+        });
+
         return () => {
             subParent.unsubscribe();
             subExpenses.unsubscribe();
             subTransactions.unsubscribe();
+            subTasks.unsubscribe();
         };
     }, [currentUser.uid, selectedChild, processingId, successId, confirmingRequest]);
 

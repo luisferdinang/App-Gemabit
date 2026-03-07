@@ -625,19 +625,38 @@ export const supabaseService = {
   },
 
   getTasks: async (studentId: string, weekId: string = getCurrentWeekId()): Promise<TaskLog[]> => {
-    let { data } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId);
+    let { data } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('week_id', weekId)
+      .order('id', { ascending: true }); // ORDENAMIENTO CONSISTENTE: Evita que las filas bailen al actualizar
 
     if (!data || data.length === 0) {
       const { data: student } = await supabase.from('profiles').select('status').eq('id', studentId).single();
       if (!student || student.status.includes('DELETED')) return [];
 
-      const { data: newTasks } = await supabase.from('tasks').insert([
+      // Intento de inserción con protección básica (aunque lo ideal sería un RPC para asegurar atomicidad)
+      const { data: newTasks, error: insertError } = await supabase.from('tasks').insert([
         { student_id: studentId, week_id: weekId, type: 'SCHOOL', status: { 'ATTENDANCE': false, 'RESPONSIBILITY': false, 'BEHAVIOR': false, 'RESPECT': false, 'PARTICIPATION': false } },
         { student_id: studentId, week_id: weekId, type: 'HOME', status: { 'CHORES': false, 'RESPECT': false, 'HYGIENE': false, 'READING': false } }
-      ]).select();
-      data = newTasks;
+      ]).select().order('id', { ascending: true });
+      
+      if (insertError) {
+         // Si falló por concurrencia, reintentamos obtenerlos
+         const { data: retryData } = await supabase
+           .from('tasks')
+           .select('*')
+           .eq('student_id', studentId)
+           .eq('week_id', weekId)
+           .order('id', { ascending: true });
+         data = retryData;
+      } else {
+        data = newTasks;
+      }
     }
 
+    // Filtrado de duplicados por tipo (si existen en la DB por errores previos)
     const uniqueTasksMap = new Map<string, any>();
     (data || []).forEach(t => {
       if (!uniqueTasksMap.has(t.type)) {
@@ -676,35 +695,41 @@ export const supabaseService = {
   },
 
   updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()): Promise<{ success: boolean, error?: string, weeklyUsed?: number }> => {
-    const { data: tasks } = await supabase.from('tasks').select('*').eq('student_id', studentId).eq('week_id', weekId).eq('type', type);
+    // 1. Obtener el registro específico que queremos actualizar (con orden para consistencia)
+    const { data: tasks } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('week_id', weekId)
+      .eq('type', type)
+      .order('id', { ascending: true });
+    
+    // Si hay duplicados, siempre usamos el primero de forma consistente
     const task = tasks?.[0];
 
     if (!task) return { success: false, error: 'Tarea no encontrada' };
-    if (task.status[key] === value) return { success: false, error: 'Sin cambios' };
+    if (task.status[key] === value) return { success: false, error: 'Esta tarea ya está en el estado deseado.' };
 
     const reward = type === 'SCHOOL' ? 20 : 25;
     const change = value ? reward : -reward;
 
-    // Proceder con la asignación
-
-    // Proceder con la asignación usando un filtro de seguridad (Optimistic Locking)
-    // Solo actualizamos si el estado actual en la DB sigue siendo el opuesto al que queremos poner
+    // 2. Actualización Optimista con Filtro de Seguridad
     const newStatus = { ...task.status, [key]: value };
     const { data: updateData, error: updateError } = await supabase
       .from('tasks')
       .update({ status: newStatus })
       .eq('id', task.id)
-      .filter(`status->>${key}`, 'eq', (!value).toString()) // Asegurarnos que el valor actual es el opuesto
+      .filter(`status->>${key}`, 'eq', (!value).toString()) 
       .select();
 
     if (updateError || !updateData || updateData.length === 0) {
-      // Si no se actualizó nada, es porque alguien más ya lo hizo o hubo un error
-      return { success: false, error: 'La tarea ya fue actualizada por otro usuario o dispositivo.' };
+      return { success: false, error: 'Error de sincronización: La tarea ya fue modificada por otro usuario.' };
     }
 
+    // 3. ACTUALIZACIÓN DEL BALANCE (Solo si la base de datos confirmó el cambio de estado)
     const label = TASK_NAMES[key] || key;
-
     const { data: student } = await supabase.from('profiles').select('balance').eq('id', studentId).single();
+    
     if (student) {
       await supabase.from('profiles').update({ balance: student.balance + change }).eq('id', studentId);
       await supabase.from('transactions').insert({
@@ -715,6 +740,7 @@ export const supabaseService = {
         timestamp: Date.now()
       });
     }
+    
     return { success: true };
   },
 

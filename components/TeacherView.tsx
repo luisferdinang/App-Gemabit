@@ -136,11 +136,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
       if (selectedStudent) loadStudentDetails(selectedStudent);
     });
 
+    // SUSCRIPCIÓN PARA TAREAS (Sincronización en tiempo real con Padres)
+    const tasksSub = supabaseService.subscribeToChanges('tasks', undefined, () => {
+      loadData();
+    });
+
     return () => {
       subscription.unsubscribe();
       quizResultSub.unsubscribe();
       quizzesSub.unsubscribe();
       transSub.unsubscribe();
+      tasksSub.unsubscribe();
     };
   }, [activeTab]);
 
@@ -666,7 +672,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
                       <div className="flex items-center gap-2 flex-1">
                         <div className="relative flex-1">
                           <select value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)} className="w-full appearance-none bg-slate-50 border-2 border-slate-100 rounded-xl p-3 pr-10 font-black text-slate-600 focus:outline-none focus:border-violet-500 transition-colors text-sm">
-                            {availableWeeks.map(week => (<option key={week.weekId} value={week.weekId}>Semana {getRelativeWeekNumber(week.weekId, systemStartDate)} ({week.weekId === getCurrentWeekId() ? 'Actual' : week.weekId.split('-W')[0]})</option>))}
+                            {availableWeeks.map(week => (
+                              <option key={week.weekId} value={week.weekId}>
+                                Semana {getRelativeWeekNumber(week.weekId, systemStartDate)} ({getWeekDateRange(week.weekId)})
+                              </option>
+                            ))}
                           </select>
                           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                         </div>

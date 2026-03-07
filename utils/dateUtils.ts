@@ -51,8 +51,17 @@ export const getWeekDateRange = (weekId: string) => {
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
 
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${start.toLocaleDateString('es-ES', options)} - ${end.toLocaleDateString('es-ES', options)}`;
+    const startDay = start.getDate();
+    const endDay = end.getDate();
+    const month = start.toLocaleDateString('es-ES', { month: 'short' });
+    
+    // Si el mes cambia a mitad de semana
+    if (start.getMonth() !== end.getMonth()) {
+       const endMonth = end.toLocaleDateString('es-ES', { month: 'short' });
+       return `lun ${startDay} ${month} a dom ${endDay} ${endMonth}`;
+    }
+
+    return `lun ${startDay} a dom ${endDay} ${month}`;
   } catch (e) {
     return 'Semana Actual';
   }
