@@ -189,10 +189,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ currentUser, refreshUs
   const loadStudentDetails = async (uid: string) => {
     const weeks = await supabaseService.getStudentWeeks(uid);
     setAvailableWeeks(weeks);
-    if (weeks.length > 0) {
+    
+    // Default to current week if available in the list, otherwise use the first one (most recent)
+    const currentWeek = getCurrentWeekId();
+    const hasCurrentWeek = weeks.some(w => w.weekId === currentWeek);
+    
+    if (hasCurrentWeek) {
+      setSelectedWeek(currentWeek);
+    } else if (weeks.length > 0) {
       setSelectedWeek(weeks[0].weekId);
     } else {
-      setSelectedWeek(getCurrentWeekId());
+      setSelectedWeek(currentWeek);
     }
     // Ahora cargamos TRANSACCIONES, no solo expenses
     const trans = await supabaseService.getTransactions(uid);

@@ -118,7 +118,12 @@ export const ParentView: React.FC<ParentViewProps> = ({ currentUser }) => {
         if (!weeks.find(w => w.weekId === current)) {
             weeks.push({ weekId: current, completion: 0 });
         }
-        weeks.sort((a, b) => b.weekId.localeCompare(a.weekId));
+        weeks.sort((a, b) => {
+            const [aYear, aWeek] = a.weekId.split('-W').map(Number);
+            const [bYear, bWeek] = b.weekId.split('-W').map(Number);
+            if (aYear !== bYear) return bYear - aYear;
+            return bWeek - aWeek;
+        });
         setAvailableWeeks(weeks);
     };
 

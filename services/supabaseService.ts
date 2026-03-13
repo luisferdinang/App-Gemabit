@@ -691,7 +691,15 @@ export const supabaseService = {
     });
     const currentWeek = getCurrentWeekId();
     if (!weeksMap.has(currentWeek)) weeksMap.set(currentWeek, 0);
-    return Array.from(weeksMap.entries()).map(([weekId, completion]) => ({ weekId, completion })).sort((a, b) => b.weekId.localeCompare(a.weekId));
+    return Array.from(weeksMap.entries())
+      .map(([weekId, completion]) => ({ weekId, completion }))
+      .sort((a, b) => {
+        // Correct chronological sorting: Year first, then numeric week number
+        const [aYear, aWeek] = a.weekId.split('-W').map(Number);
+        const [bYear, bWeek] = b.weekId.split('-W').map(Number);
+        if (aYear !== bYear) return bYear - aYear;
+        return bWeek - aWeek;
+      });
   },
 
   updateTaskStatus: async (studentId: string, type: 'SCHOOL' | 'HOME', key: string, value: boolean, weekId: string = getCurrentWeekId()): Promise<{ success: boolean, error?: string, weeklyUsed?: number }> => {

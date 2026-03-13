@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User, TaskLog, Quiz, QuizResult, ExpenseRequest, SavingsGoal, ExpenseCategory, Transaction } from '../types';
 import { supabaseService, getCurrentWeekId } from '../services/supabaseService';
@@ -176,7 +176,12 @@ export const StudentView: React.FC<StudentViewProps> = ({ student: initialStuden
         if (!data.find(w => w.weekId === current)) {
             data.push({ weekId: current, completion: 0 });
         }
-        data.sort((a, b) => b.weekId.localeCompare(a.weekId));
+        data.sort((a, b) => {
+            const [aYear, aWeek] = a.weekId.split('-W').map(Number);
+            const [bYear, bWeek] = b.weekId.split('-W').map(Number);
+            if (aYear !== bYear) return bYear - aYear;
+            return bWeek - aWeek;
+        });
         setStudentWeeks(data);
     };
 
